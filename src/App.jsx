@@ -832,6 +832,69 @@ function AnalyticsTab({ employees, attendance }) {
     };
   }, [attendance, employees, range, selectedEmployeeId, currentDate]);
 
+  const handleExportCSV = () => {
+    // Re-calculate window (copied logic to ensure consistency with view)
+    const endWindow = new Date(currentDate);
+    const startWindow = new Date(currentDate);
+
+    if (range === 'Week') {
+        const day = endWindow.getDay();
+        const diff = endWindow.getDate() - day + (day === 0 ? -6 : 1); 
+        startWindow.setDate(diff);
+        startWindow.setHours(0,0,0,0);
+        endWindow.setDate(diff + 6);
+        endWindow.setHours(23,59,59,999);
+    } else if (range === 'Month') {
+        startWindow.setDate(1);
+        startWindow.setHours(0,0,0,0);
+        endWindow.setMonth(endWindow.getMonth() + 1);
+        endWindow.setDate(0);
+        endWindow.setHours(23,59,59,999);
+    } else if (range === 'Year') {
+        startWindow.setMonth(0, 1);
+        startWindow.setHours(0,0,0,0);
+        endWindow.setMonth(11, 31);
+        endWindow.setHours(23,59,59,999);
+    }
+
+    // Filter
+    const filteredLogs = attendance.filter(log => {
+        const d = new Date(log.timestamp);
+        const inTime = d >= startWindow && d <= endWindow;
+        const matchesEmp = selectedEmployeeId === 'all' || log.employeeId === selectedEmployeeId;
+        return inTime && matchesEmp;
+    });
+
+    if (filteredLogs.length === 0) {
+        alert("No data to export for the selected range.");
+        return;
+    }
+
+    // Convert to CSV
+    const csvHeader = "Date,Time,Employee Name,Action,Hours,Earnings,Note\n";
+    const csvRows = filteredLogs.map(log => {
+        const date = new Date(log.timestamp);
+        const dateStr = date.toLocaleDateString();
+        const timeStr = date.toLocaleTimeString();
+        const name = `"${log.employeeName || ''}"`;
+        const action = log.action;
+        const hours = log.calculatedHours || 0;
+        const earnings = log.earnedAmount || 0;
+        const note = `"${log.note || ''}"`;
+        return `${dateStr},${timeStr},${name},${action},${hours},${earnings},${note}`;
+    }).join("\n");
+
+    const csvString = csvHeader + csvRows;
+    const blob = new Blob([csvString], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `export_${range.toLowerCase()}_${startWindow.toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       {/* Control Bar */}
@@ -878,7 +941,10 @@ function AnalyticsTab({ employees, attendance }) {
              </button>
          </div>
 
-         <button className="flex items-center gap-2 text-slate-500 hover:text-cyan-600 px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white w-full xl:w-auto justify-center">
+         <button 
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 text-slate-500 hover:text-cyan-600 px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white w-full xl:w-auto justify-center"
+         >
             <Download size={16} /> Export CSV
          </button>
       </div>
