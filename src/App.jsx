@@ -386,7 +386,7 @@ function LandingScreen({ navigate }) {
             Scanner Portal <ArrowRight size={20} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
           </h2>
           <p className="text-slate-400 text-sm leading-relaxed">
-            Public kiosk interface for employee attendance. Optimized for barcode scanners and touchless entry.
+            
           </p>
           <div className="mt-6 flex items-center gap-2 text-xs text-green-400 font-mono">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
@@ -406,7 +406,7 @@ function LandingScreen({ navigate }) {
             Admin Dashboard <Lock size={16} className="text-slate-500" />
           </h2>
           <p className="text-slate-400 text-sm leading-relaxed">
-            Secure backend for payroll, employee management, and analytics. Requires master credentials.
+            
           </p>
           <div className="mt-6 flex items-center gap-2 text-xs text-indigo-400 font-mono">
             <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
