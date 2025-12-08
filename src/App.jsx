@@ -370,7 +370,7 @@ function LandingScreen({ navigate }) {
           </div>
         </div>
         <h1 className="text-5xl font-bold tracking-tight mb-4">AQUA</h1>
-        <p className="text-slate-400 text-lg">Select your portal to continue</p>
+        <p className="text-slate-400 text-lg"> </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
