@@ -181,9 +181,8 @@ const generateUniqueId = (employees) => {
 
 // --- External Barcode Image URL ---
 const getBarcodeUrl = (code) => {
-    // Using a common, free image chart API for Code 128 barcode generation
-    // Parameters: cht=barcode (Chart Type), chld=C (Code 128 encoding), chs=300x100 (Size), chd=t:{data}
-    const apiUrl = `https://chart.googleapis.com/chart?cht=barcode&chs=300x100&chld=C&chd=t:${code}`;
+    // Using barcodeapi.org for Code 128 generation
+    const apiUrl = `https://barcodeapi.org/api/code128/${code}`;
     return apiUrl;
 }
 
@@ -197,9 +196,10 @@ const BarcodeVisualization = ({ code }) => {
                 src={url} 
                 alt={`Barcode for ID ${code}`}
                 className="w-full h-auto max-w-xs object-contain"
+                // Fallback for when the external API fails to load the image
                 onError={(e) => {
                     e.target.onerror = null; 
-                    e.target.src = "https://placehold.co/300x100/eeeeee/333333?text=BARCODE+FAILED";
+                    e.target.src = "https://placehold.co/300x100/f87171/ffffff?text=API+BARCODE+FAILED";
                 }}
             />
             <p className="text-sm text-slate-600 mt-3 font-mono">ID: <span className="font-bold text-cyan-700">{code}</span></p>
@@ -296,7 +296,8 @@ function BarcodeDisplayModal({ employee, onClose }) {
                     </div>
 
                     <p className="text-slate-600 mb-6">
-                        This barcode image is generated using the unique ID and the Code 128 format for reliable scanning.
+                        This barcode image is generated dynamically using the **barcodeapi.org** service and the Code 128 format.
+                        It should be scannable by specialized readers and modern smartphones.
                     </p>
 
                     <div className="flex justify-center mb-6">
@@ -305,10 +306,10 @@ function BarcodeDisplayModal({ employee, onClose }) {
 
                     <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
                         <h4 className="font-semibold text-cyan-800 flex items-center gap-2">
-                            <Download size={16} /> Direct URL for Distribution
+                            <Download size={16} /> Direct Link to Image
                         </h4>
                         <p className="text-sm text-cyan-700 mt-2">
-                            You can send this direct link to your employees to ensure they receive the high-resolution, scannable image:
+                            Use this direct link to share the high-resolution image with employees:
                         </p>
                         <p className="text-sm text-cyan-700 mt-2 font-mono break-all text-xs">
                            <a href={barcodeUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-900">
