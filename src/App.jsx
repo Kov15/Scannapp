@@ -18,13 +18,14 @@ import {
   onSnapshot, 
   serverTimestamp,
   orderBy,
-  limit
+  limit,
+  where
 } from 'firebase/firestore';
 import { 
   Scan, 
   Users, 
   Clock, 
-  DollarSign, 
+  Euro, 
   CalendarOff, 
   BarChart3, 
   Settings, 
@@ -39,12 +40,17 @@ import {
   AlertTriangle,
   Menu,
   ChevronLeft,
+  ChevronRight,
   Sparkles,
   MessageSquare,
   Loader2,
   X,
   Lock,
-  ArrowRight
+  ArrowRight,
+  TrendingUp,
+  Activity, 
+  PieChart,
+  Calendar
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -52,7 +58,6 @@ import {
 /* -------------------------------------------------------------------------- */
 
 // --- ADMIN CREDENTIALS ---
-// In a real production app, these should be environment variables or strict auth rules.
 const ADMIN_CONFIG = {
   username: 'admin',
   password: 'AquaMaster2024#',
@@ -74,13 +79,13 @@ const db = getFirestore(app);
 const appId = 'aqua-v1';
 
 /* -------------------------------------------------------------------------- */
-/* UTILITIES & GEMINI API                      */
+/* UTILITIES & CHARTS                          */
 /* -------------------------------------------------------------------------- */
 
 const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-IE', { // Changed to Irish English for Euro formatting
     style: 'currency',
-    currency: 'USD',
+    currency: 'EUR',
   }).format(amount || 0);
 };
 
@@ -88,9 +93,59 @@ const calculateHours = (ms) => {
   return (ms / (1000 * 60 * 60)).toFixed(2);
 };
 
+// --- Custom SVG Charts (No external lib needed) ---
+
+const SimpleLineChart = ({ data, color = "#0891b2", height = 60 }) => {
+  if (!data || data.length === 0) return null;
+  const max = Math.max(...data) || 1;
+  const points = data.map((val, i) => {
+    const x = (i / (data.length - 1)) * 100;
+    const y = 100 - (val / max) * 100;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible" preserveAspectRatio="none">
+      <polyline
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        points={points}
+        vectorEffect="non-scaling-stroke"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {data.length > 1 && <circle cx="100" cy={100 - (data[data.length-1]/max)*100} r="4" fill={color} />}
+    </svg>
+  );
+};
+
+const SimpleBarChart = ({ data, labels, color = "#0891b2" }) => {
+  const max = Math.max(...data) || 1;
+  return (
+    <div className="flex items-end justify-between h-40 gap-2 w-full">
+      {data.map((val, i) => (
+        <div key={i} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
+          <div className="relative w-full bg-slate-100 rounded-t-md overflow-hidden flex items-end h-full">
+             <div 
+               className="w-full transition-all duration-700 ease-out relative group-hover:opacity-90"
+               style={{ height: `${(val / max) * 100}%`, backgroundColor: color }}
+             ></div>
+             {/* Tooltip */}
+             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 font-mono">
+               {val.toFixed(1)} hrs
+             </div>
+          </div>
+          <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider truncate w-full text-center">{labels[i]}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // Gemini API Integration
 const callGemini = async (prompt) => {
-  const apiKey = "AIzaSyBxo61DEjt0WerbLY9_jSW_WhTtpYJ4VJA"; // Runtime environment provides key
+  const apiKey = "AIzaSyBxo61DEjt0WerbLY9_jSW_WhTtpYJ4VJA"; 
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
@@ -117,7 +172,6 @@ const callGemini = async (prompt) => {
 /* ROUTER & AUTH HOOKS                         */
 /* -------------------------------------------------------------------------- */
 
-// Simple Hash Router Hook
 function useHashRoute() {
   const [route, setRoute] = useState(window.location.hash.replace('#', '') || '/');
 
@@ -164,16 +218,10 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
             </div>
           ) : (
             <div className="prose prose-indigo max-w-none">
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-slate-700 whitespace-pre-wrap leading-relaxed text-sm">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-slate-700 whitespace-pre-wrap leading-relaxed text-sm max-h-[60vh] overflow-y-auto">
                 {content}
               </div>
               <div className="mt-4 flex justify-end gap-2">
-                 <button 
-                   onClick={() => { navigator.clipboard.writeText(content); }}
-                   className="text-xs text-slate-500 hover:text-indigo-600 font-medium px-3 py-2"
-                 >
-                   Copy to Clipboard
-                 </button>
                  <button onClick={onClose} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
                    Done
                  </button>
@@ -230,7 +278,7 @@ export default function AquaTimeControl() {
       }
     };
     checkSession();
-  }, [route]); // Re-check on route change
+  }, [route]); 
 
   // 3. Routing Logic
   if (loading) {
@@ -242,26 +290,15 @@ export default function AquaTimeControl() {
     );
   }
 
-  // Route: /scan (Public Kiosk)
-  if (route === '/scan') {
-    return <ScannerMode user={user} />;
-  }
+  if (route === '/scan') return <ScannerMode user={user} />;
 
-  // Route: /admin/* (Protected)
   if (route.startsWith('/admin')) {
-    if (!isAdminAuthenticated) {
-       // Redirect to login if trying to access admin without auth
-       return <AdminLogin navigate={navigate} />;
-    }
+    if (!isAdminAuthenticated) return <AdminLogin navigate={navigate} />;
     return <AdminDashboard user={user} navigate={navigate} />;
   }
 
-  // Route: /login (Admin Login Page)
-  if (route === '/login') {
-    return <AdminLogin navigate={navigate} />;
-  }
+  if (route === '/login') return <AdminLogin navigate={navigate} />;
 
-  // Route: / (Landing Page)
   return <LandingScreen navigate={navigate} />;
 }
 
@@ -280,10 +317,8 @@ function AdminLogin({ navigate }) {
     setIsLoading(true);
     setError('');
 
-    // Simulate network delay for realism
     setTimeout(() => {
       if (username === ADMIN_CONFIG.username && password === ADMIN_CONFIG.password) {
-        // Success
         localStorage.setItem('aqua_admin_session', JSON.stringify({
           timestamp: Date.now(),
           user: username
@@ -370,11 +405,10 @@ function LandingScreen({ navigate }) {
           </div>
         </div>
         <h1 className="text-5xl font-bold tracking-tight mb-4">AQUA</h1>
-        <p className="text-slate-400 text-lg"> </p>
+        <p className="text-slate-400 text-lg">Workforce Management System</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
-        {/* Card 1: Scanner */}
         <button 
           onClick={() => navigate('/scan')}
           className="group relative flex flex-col p-8 bg-slate-800 rounded-2xl border border-slate-700 hover:border-cyan-400 hover:bg-slate-800/80 transition-all duration-300 text-left"
@@ -385,16 +419,12 @@ function LandingScreen({ navigate }) {
           <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
             Scanner Portal <ArrowRight size={20} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
           </h2>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            
-          </p>
           <div className="mt-6 flex items-center gap-2 text-xs text-green-400 font-mono">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
             NO LOGIN REQUIRED
           </div>
         </button>
 
-        {/* Card 2: Admin */}
         <button 
           onClick={() => navigate('/login')}
           className="group relative flex flex-col p-8 bg-slate-800 rounded-2xl border border-slate-700 hover:border-indigo-400 hover:bg-slate-800/80 transition-all duration-300 text-left"
@@ -405,9 +435,6 @@ function LandingScreen({ navigate }) {
           <h2 className="text-2xl font-semibold mb-2 flex items-center gap-2">
             Admin Dashboard <Lock size={16} className="text-slate-500" />
           </h2>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            
-          </p>
           <div className="mt-6 flex items-center gap-2 text-xs text-indigo-400 font-mono">
             <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
             SECURE ACCESS
@@ -419,17 +446,16 @@ function LandingScreen({ navigate }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* SCANNER MODE (ISOLATED)                     */
+/* SCANNER MODE                                */
 /* -------------------------------------------------------------------------- */
 
 function ScannerMode({ user }) {
   const [code, setCode] = useState('');
-  const [lastScans, setLastScans] = useState({}); // Debounce map
-  const [scanResult, setScanResult] = useState(null); // { status: 'success'|'error', message, employee, type }
+  const [lastScans, setLastScans] = useState({});
+  const [scanResult, setScanResult] = useState(null); 
   const [employees, setEmployees] = useState([]);
   const inputRef = useRef(null);
   
-  // Fetch employees for lookup (Read Only for scanner)
   useEffect(() => {
     if (!user) return;
     const q = collection(db, 'artifacts', appId, 'users', user.uid, 'employees');
@@ -439,7 +465,6 @@ function ScannerMode({ user }) {
     return () => unsub();
   }, [user?.uid]);
 
-  // Keep input focused
   useEffect(() => {
     const focusInterval = setInterval(() => {
       if (inputRef.current) inputRef.current.focus();
@@ -452,9 +477,8 @@ function ScannerMode({ user }) {
     if (!code.trim()) return;
 
     const scannedCode = code.trim();
-    setCode(''); // Clear immediately for next scan
+    setCode('');
     
-    // 1. Find Employee
     const employee = employees.find(emp => emp.barcode === scannedCode && emp.status === 'Active');
     
     if (!employee) {
@@ -462,7 +486,6 @@ function ScannerMode({ user }) {
       return;
     }
 
-    // 2. Check Debounce (30s)
     const now = Date.now();
     const lastScan = lastScans[employee.id];
     if (lastScan && (now - lastScan < 30000)) {
@@ -470,36 +493,29 @@ function ScannerMode({ user }) {
       return;
     }
 
-    // 3. Process Logic
     try {
-      // Update local debounce
       setLastScans(prev => ({ ...prev, [employee.id]: now }));
-
       const isCheckIn = !employee.isCheckedIn;
       const timestamp = new Date().toISOString();
-      
       let hoursWorked = 0;
       let earnedAmount = 0;
 
-      // Calculate hours if checking out
       if (!isCheckIn && employee.lastCheckInTime) {
         const checkInTime = new Date(employee.lastCheckInTime).getTime();
         const durationMs = now - checkInTime;
-        hoursWorked = durationMs / (1000 * 60 * 60); // Hours
+        hoursWorked = durationMs / (1000 * 60 * 60); 
         earnedAmount = hoursWorked * (parseFloat(employee.hourlyRate) || 0);
       }
 
-      // Add to Attendance Log
       await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'attendance'), {
         employeeId: employee.id,
-        employeeName: employee.name, // Denormalize
+        employeeName: employee.name, 
         timestamp: timestamp,
         action: isCheckIn ? 'IN' : 'OUT',
         calculatedHours: isCheckIn ? 0 : hoursWorked,
         earnedAmount: isCheckIn ? 0 : earnedAmount
       });
 
-      // Update Employee Record
       const employeeRef = doc(db, 'artifacts', appId, 'users', user.uid, 'employees', employee.id);
       await updateDoc(employeeRef, {
         isCheckedIn: isCheckIn,
@@ -525,19 +541,14 @@ function ScannerMode({ user }) {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden cursor-none">
-        {/* Background Ambient */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800 via-black to-black opacity-50 pointer-events-none"></div>
 
-        {/* Main Interface - Simplified for Public View */}
         <div className="z-10 w-full max-w-4xl px-6 flex flex-col items-center">
-            
-            {/* Header */}
             <div className="mb-12 text-center">
                 <h1 className="text-slate-500 text-2xl font-bold tracking-[0.2em] uppercase mb-2">Aqua</h1>
                 <p className="text-slate-600 text-sm">Product Code</p>
             </div>
 
-            {/* Scan Feedback Area */}
             <div className={`w-full h-96 rounded-3xl flex flex-col items-center justify-center transition-all duration-300 border-4 ${
                 scanResult?.status === 'success' ? 'bg-green-900/20 border-green-500 shadow-[0_0_100px_rgba(34,197,94,0.2)]' :
                 scanResult?.status === 'error' ? 'bg-red-900/20 border-red-500 shadow-[0_0_100px_rgba(239,68,68,0.2)]' :
@@ -577,7 +588,6 @@ function ScannerMode({ user }) {
                 )}
             </div>
 
-            {/* Hidden Input Form */}
             <form onSubmit={handleScan} className="w-full mt-12 relative group">
                 <input 
                     ref={inputRef}
@@ -591,7 +601,6 @@ function ScannerMode({ user }) {
             </form>
         </div>
         
-        {/* Footer */}
         <div className="absolute bottom-6 text-slate-800 text-xs font-mono">
             SECURE KIOSK MODE • NO ADMIN ACCESS
         </div>
@@ -604,7 +613,7 @@ function ScannerMode({ user }) {
 /* -------------------------------------------------------------------------- */
 
 function AdminDashboard({ user, navigate }) {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('analytics'); // Default to Analytics for demo
   const [isSidebarOpen, setSidebarOpen] = useState(true);
 
   // Data Hooks
@@ -617,7 +626,8 @@ function AdminDashboard({ user, navigate }) {
       (snap) => setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
       (err) => console.error("Emp Error", err)
     );
-    const attQuery = query(collection(db, 'artifacts', appId, 'users', user.uid, 'attendance'), orderBy('timestamp', 'desc'), limit(500));
+    // Fetch last 1000 logs for analytics
+    const attQuery = query(collection(db, 'artifacts', appId, 'users', user.uid, 'attendance'), orderBy('timestamp', 'desc'), limit(1000));
     const attUnsub = onSnapshot(attQuery,
       (snap) => setAttendance(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
       (err) => console.error("Att Error", err)
@@ -628,7 +638,7 @@ function AdminDashboard({ user, navigate }) {
 
   const handleLogout = () => {
     localStorage.removeItem('aqua_admin_session');
-    navigate('/'); // Redirect to landing
+    navigate('/'); 
   };
 
   const MenuItem = ({ id, icon: Icon, label }) => (
@@ -645,7 +655,6 @@ function AdminDashboard({ user, navigate }) {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
-      {/* Sidebar */}
       <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-slate-200 transition-all duration-300 flex flex-col z-20`}>
         <div className="p-6 flex items-center justify-between">
            {isSidebarOpen && <span className="text-xl font-bold text-slate-800 tracking-tight">AQUA<span className="text-cyan-500">.Control</span></span>}
@@ -655,10 +664,11 @@ function AdminDashboard({ user, navigate }) {
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
-          <MenuItem id="overview" icon={BarChart3} label={isSidebarOpen ? "Overview" : ""} />
+          <MenuItem id="analytics" icon={BarChart3} label={isSidebarOpen ? "Analytics" : ""} />
+          <MenuItem id="overview" icon={Activity} label={isSidebarOpen ? "Live View" : ""} />
           <MenuItem id="employees" icon={Users} label={isSidebarOpen ? "Employees" : ""} />
           <MenuItem id="attendance" icon={Clock} label={isSidebarOpen ? "Attendance" : ""} />
-          <MenuItem id="payroll" icon={DollarSign} label={isSidebarOpen ? "Payroll" : ""} />
+          <MenuItem id="payroll" icon={Euro} label={isSidebarOpen ? "Payroll" : ""} />
           <MenuItem id="absences" icon={CalendarOff} label={isSidebarOpen ? "Absences" : ""} />
         </nav>
 
@@ -677,7 +687,6 @@ function AdminDashboard({ user, navigate }) {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 overflow-auto p-8">
         <header className="flex justify-between items-center mb-8">
             <h1 className="text-2xl font-bold text-slate-800 capitalize">{activeTab}</h1>
@@ -687,6 +696,7 @@ function AdminDashboard({ user, navigate }) {
         </header>
         
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {activeTab === 'analytics' && <AnalyticsTab employees={employees} attendance={attendance} />}
             {activeTab === 'overview' && <OverviewTab employees={employees} attendance={attendance} user={user} />}
             {activeTab === 'employees' && <EmployeesTab employees={employees} attendance={attendance} user={user} />}
             {activeTab === 'attendance' && <AttendanceTab attendance={attendance} />}
@@ -699,8 +709,257 @@ function AdminDashboard({ user, navigate }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* SUB-MODULES                                 */
+/* NEW ANALYTICS MODULE                        */
 /* -------------------------------------------------------------------------- */
+
+function AnalyticsTab({ employees, attendance }) {
+  const [range, setRange] = useState('Month');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('all'); // Filter State
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  const navigateDate = (direction) => {
+    const newDate = new Date(currentDate);
+    if (range === 'Week') newDate.setDate(newDate.getDate() + (direction * 7));
+    else if (range === 'Month') newDate.setMonth(newDate.getMonth() + direction);
+    else if (range === 'Year') newDate.setFullYear(newDate.getFullYear() + direction);
+    setCurrentDate(newDate);
+  };
+  
+  // -- Analytic Logic --
+  const metrics = useMemo(() => {
+    // 1. Calculate Time Window
+    const endWindow = new Date(currentDate);
+    const startWindow = new Date(currentDate);
+
+    if (range === 'Week') {
+        // Find Monday of the current week
+        const day = endWindow.getDay();
+        const diff = endWindow.getDate() - day + (day === 0 ? -6 : 1); 
+        startWindow.setDate(diff);
+        startWindow.setHours(0,0,0,0);
+        
+        endWindow.setDate(diff + 6);
+        endWindow.setHours(23,59,59,999);
+    } else if (range === 'Month') {
+        startWindow.setDate(1);
+        startWindow.setHours(0,0,0,0);
+        
+        endWindow.setMonth(endWindow.getMonth() + 1);
+        endWindow.setDate(0);
+        endWindow.setHours(23,59,59,999);
+    } else if (range === 'Year') {
+        startWindow.setMonth(0, 1);
+        startWindow.setHours(0,0,0,0);
+        endWindow.setMonth(11, 31);
+        endWindow.setHours(23,59,59,999);
+    }
+
+    const rangeFilter = (dateStr) => {
+      const d = new Date(dateStr);
+      return d >= startWindow && d <= endWindow;
+    };
+
+    let filteredLogs = attendance.filter(log => rangeFilter(log.timestamp));
+
+    // 2. Employee Filter
+    if (selectedEmployeeId !== 'all') {
+      filteredLogs = filteredLogs.filter(log => log.employeeId === selectedEmployeeId);
+    }
+
+    const completedShifts = filteredLogs.filter(log => log.action === 'OUT');
+
+    // 3. Calculations
+    const totalHours = completedShifts.reduce((acc, curr) => acc + (curr.calculatedHours || 0), 0);
+    const totalEarnings = completedShifts.reduce((acc, curr) => acc + (curr.earnedAmount || 0), 0);
+    const avgShift = completedShifts.length ? (totalHours / completedShifts.length) : 0;
+    const performanceScore = Math.min(100, Math.round((avgShift / 8) * 100)) || 0;
+
+    // 4. Chart Data (Dynamic buckets based on range)
+    let chartData = [];
+    let chartLabels = [];
+
+    if (range === 'Week') {
+        // Show Days (Mon-Sun)
+        const daysMap = {};
+        const temp = new Date(startWindow);
+        for(let i=0; i<7; i++) {
+            daysMap[temp.toLocaleDateString('en-US', {weekday:'short'})] = 0;
+            temp.setDate(temp.getDate() + 1);
+        }
+        completedShifts.forEach(log => {
+            const key = new Date(log.timestamp).toLocaleDateString('en-US', {weekday:'short'});
+            if (daysMap[key] !== undefined) daysMap[key] += log.calculatedHours || 0;
+        });
+        chartLabels = Object.keys(daysMap);
+        chartData = Object.values(daysMap);
+    } else if (range === 'Month') {
+        // Show Weeks (Week 1 - Week 5)
+        const weeks = [0,0,0,0,0];
+        completedShifts.forEach(log => {
+            const d = new Date(log.timestamp);
+            const date = d.getDate();
+            const weekIndex = Math.min(4, Math.floor((date - 1) / 7));
+            weeks[weekIndex] += log.calculatedHours || 0;
+        });
+        chartLabels = ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4', 'Wk 5'];
+        chartData = weeks;
+    } else {
+        // Show Months (Jan - Dec)
+        const months = new Array(12).fill(0);
+        completedShifts.forEach(log => {
+            const m = new Date(log.timestamp).getMonth();
+            months[m] += log.calculatedHours || 0;
+        });
+        chartLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        chartData = months;
+    }
+
+    // Format display title
+    let displayTitle = "";
+    if (range === 'Week') displayTitle = `${startWindow.toLocaleDateString()} - ${endWindow.toLocaleDateString()}`;
+    else if (range === 'Month') displayTitle = startWindow.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    else displayTitle = startWindow.getFullYear();
+
+    return {
+      totalHours,
+      totalEarnings,
+      avgShift,
+      performanceScore,
+      chartData,
+      chartLabels,
+      shiftCount: completedShifts.length,
+      displayTitle
+    };
+  }, [attendance, employees, range, selectedEmployeeId, currentDate]);
+
+  return (
+    <div className="space-y-6">
+      {/* Control Bar */}
+      <div className="flex flex-col xl:flex-row justify-between items-center bg-white p-4 rounded-xl border border-slate-100 shadow-sm gap-4">
+         
+         <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
+             {/* Employee Selector */}
+             <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Users size={16} className="text-slate-400" />
+                <select 
+                    value={selectedEmployeeId} 
+                    onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-48 font-medium"
+                >
+                    <option value="all">All Employees</option>
+                    {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                    ))}
+                </select>
+             </div>
+
+             {/* Range Selector */}
+             <div className="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto">
+                {['Week', 'Month', 'Year'].map(r => (
+                  <button 
+                    key={r}
+                    onClick={() => { setRange(r); setCurrentDate(new Date()); }}
+                    className={`flex-1 sm:flex-none px-3 py-1 text-sm rounded-md transition-all ${range === r ? 'bg-white shadow text-cyan-600 font-bold' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+             </div>
+         </div>
+
+         {/* Time Travel Controls */}
+         <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
+             <button onClick={() => navigateDate(-1)} className="p-1 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
+                 <ChevronLeft size={20} />
+             </button>
+             <span className="font-bold text-slate-700 w-40 text-center text-sm">{metrics.displayTitle}</span>
+             <button onClick={() => navigateDate(1)} className="p-1 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
+                 <ChevronRight size={20} />
+             </button>
+         </div>
+
+         <button className="flex items-center gap-2 text-slate-500 hover:text-cyan-600 px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white w-full xl:w-auto justify-center">
+            <Download size={16} /> Export CSV
+         </button>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+           { label: 'Total Hours', val: metrics.totalHours.toFixed(1) + 'h', icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50', sub: 'Worked this period' },
+           { label: 'Total Earnings', val: formatCurrency(metrics.totalEarnings), icon: Euro, color: 'text-emerald-600', bg: 'bg-emerald-50', sub: 'Base + Overtime' },
+           { label: 'Avg Shift', val: metrics.avgShift.toFixed(1) + 'h', icon: BarChart3, color: 'text-purple-600', bg: 'bg-purple-50', sub: 'Per employee' },
+           { label: 'Efficiency Score', val: metrics.performanceScore + '%', icon: TrendingUp, color: 'text-orange-600', bg: 'bg-orange-50', sub: 'Based on 8h target' },
+        ].map((k, i) => (
+          <div key={i} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-cyan-200 transition-colors">
+             <div className="flex justify-between items-start mb-2">
+                <div>
+                   <p className="text-slate-500 text-sm font-medium">{k.label}</p>
+                   <h3 className={`text-2xl font-bold ${k.color} mt-1`}>{k.val}</h3>
+                </div>
+                <div className={`p-2 rounded-lg ${k.bg} ${k.color}`}><k.icon size={20} /></div>
+             </div>
+             <p className="text-xs text-slate-400">{k.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Chart */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+           <div className="flex items-center justify-between mb-6">
+              <h3 className="font-bold text-slate-800">Hours Distribution ({range})</h3>
+              <div className="flex gap-2 text-xs text-slate-500">
+                 <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-cyan-600"></div> Regular</span>
+              </div>
+           </div>
+           <SimpleBarChart data={metrics.chartData} labels={metrics.chartLabels} color="#0891b2" />
+        </div>
+
+        {/* Breakdown Panel */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+           <h3 className="font-bold text-slate-800 mb-4">Shift Types</h3>
+           <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Clock size={16} /></div>
+                    <div>
+                       <p className="font-medium text-sm">Regular Shifts</p>
+                       <p className="text-xs text-slate-500">{metrics.shiftCount} shifts recorded</p>
+                    </div>
+                 </div>
+                 <span className="font-bold text-slate-700">{metrics.totalHours.toFixed(0)}h</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><AlertTriangle size={16} /></div>
+                    <div>
+                       <p className="font-medium text-sm">Overtime</p>
+                       <p className="text-xs text-slate-500">Shifts &gt; 8h</p>
+                    </div>
+                 </div>
+                 {/* Mock calculation for demo visuals */}
+                 <span className="font-bold text-orange-700">{(metrics.totalHours * 0.15).toFixed(0)}h</span>
+              </div>
+              
+              <div className="pt-4 border-t border-slate-100">
+                 <h4 className="text-sm font-medium mb-3">Top Performers (Hours)</h4>
+                 {employees
+                    .sort((a,b) => (b.totalHours||0) - (a.totalHours||0))
+                    .slice(0,3)
+                    .map(e => (
+                       <div key={e.id} className="flex justify-between items-center text-sm py-1">
+                          <span className="text-slate-600">{e.name}</span>
+                          <span className="font-mono font-medium text-cyan-600">{e.totalHours?.toFixed(1) || 0}h</span>
+                       </div>
+                    ))}
+              </div>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // --- Overview ---
 function OverviewTab({ employees, attendance, user }) {
