@@ -50,7 +50,8 @@ import {
   TrendingUp,
   Activity, 
   PieChart,
-  Calendar
+  Calendar,
+  Barcode
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -168,6 +169,62 @@ const callGemini = async (prompt) => {
   }
 };
 
+// --- Unique ID Generator for Barcode String ---
+const generateUniqueId = (employees) => {
+  const existingCodes = employees.map(e => e.barcode).filter(Boolean);
+  let newId = 10001;
+  while(existingCodes.includes(String(newId))) {
+    newId++;
+  }
+  return String(newId);
+};
+
+// --- Simplified SVG Barcode Visualization (Non-encoding) ---
+const BarcodeVisualization = ({ code }) => {
+    // Generates a simple, readable bar pattern based on the length and characters of the code.
+    const barWidth = 3;
+    const barHeight = 60;
+    
+    let segments = [];
+    let currentX = 0;
+    
+    // Use the numeric value of the characters to determine bar width/color pseudo-randomly
+    const input = code.padEnd(10, '0'); // Ensure minimum length for visibility
+
+    for (let i = 0; i < input.length * 2; i++) {
+        const isBlack = i % 2 === 0;
+        const charIndex = Math.floor(i / 2);
+        const charValue = input.charCodeAt(charIndex) || 70;
+        const width = (charValue % 4) + 5; // Width variation 5-8 px
+
+        segments.push(
+            `<rect x="${currentX}" y="0" width="${width}" height="${barHeight}" fill="${isBlack ? 'black' : 'white'}" />`
+        );
+        currentX += width;
+    }
+    
+    const totalWidth = currentX;
+
+    return (
+        <div className="flex flex-col items-center p-4 bg-white rounded-lg border border-slate-200">
+            <svg width="100%" height={barHeight + 20} viewBox={`0 0 ${totalWidth} ${barHeight + 20}`} xmlns="http://www.w3.org/2000/svg" className="max-w-xs">
+                <g transform="translate(0, 10)">
+                    {segments.join('')}
+                    <text x="${totalWidth / 2}" y="${barHeight + 15}" 
+                          font-family="monospace, sans-serif" 
+                          font-size="12" 
+                          text-anchor="middle" 
+                          fill="black"
+                          className="font-bold">
+                        {code}
+                    </text>
+                </g>
+            </svg>
+            <p className="text-xs text-slate-500 mt-2 italic">Scannable ID: {code}</p>
+        </div>
+    );
+};
+
 /* -------------------------------------------------------------------------- */
 /* ROUTER & AUTH HOOKS                         */
 /* -------------------------------------------------------------------------- */
@@ -232,6 +289,57 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
       </div>
     </div>
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* BARCODE MODAL COMPONENT                     */
+/* -------------------------------------------------------------------------- */
+
+function BarcodeDisplayModal({ employee, onClose }) {
+    if (!employee) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <Barcode size={24} className="text-cyan-600"/> Employee Code: {employee.name}
+                        </h3>
+                        <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 transition-colors">
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    <p className="text-slate-600 mb-6">
+                        This is the unique ID used for the scanner portal. Generate and distribute this code for quick clock-in/out.
+                    </p>
+
+                    <div className="flex justify-center mb-6">
+                        <BarcodeVisualization code={employee.barcode} />
+                    </div>
+
+                    <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
+                        <h4 className="font-semibold text-cyan-800 flex items-center gap-2">
+                            <AlertTriangle size={16} /> Production Note
+                        </h4>
+                        <p className="text-sm text-cyan-700 mt-2">
+                            For guaranteed scannability and EAN 128 compliance, you must use the ID below with a dedicated external Barcode API (e.g., Google Charts, Barcode Generator Service) to generate a high-resolution, encoded image before sending it to your employees.
+                        </p>
+                        <p className="text-sm text-cyan-700 mt-2 font-mono break-all">
+                            Unique ID: <span className="font-bold text-lg text-cyan-900">{employee.barcode}</span>
+                        </p>
+                    </div>
+                    
+                    <div className="mt-6 flex justify-end">
+                        <button onClick={onClose} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -464,7 +572,6 @@ function ScannerMode({ user }) {
   
   useEffect(() => {
     if (!user) return;
-    // NOTE: Uses public data
     const q = collection(db, 'artifacts', appId, 'public', 'data', 'employees');
     const unsub = onSnapshot(q, (snapshot) => {
       setEmployees(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -486,6 +593,7 @@ function ScannerMode({ user }) {
     const scannedCode = code.trim();
     setCode('');
     
+    // Scan logic looks for the 'barcode' field (which is now the unique ID)
     const employee = employees.find(emp => emp.barcode === scannedCode && emp.status === 'Active');
     
     if (!employee) {
@@ -1139,6 +1247,9 @@ function EmployeesTab({ employees, attendance, user }) {
   const [formData, setFormData] = useState({ name: '', barcode: '', hourlyRate: 0, status: 'Active' });
   const [search, setSearch] = useState('');
   
+  // Barcode State
+  const [showBarcode, setShowBarcode] = useState(null); // Holds the employee object for the modal
+
   // Gemini State
   const [geminiLoading, setGeminiLoading] = useState(false);
   const [geminiResult, setGeminiResult] = useState(null);
@@ -1146,13 +1257,16 @@ function EmployeesTab({ employees, attendance, user }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // NOTE: Changed to 'public/data' for shared access
       if (formData.id) {
         const ref = doc(db, 'artifacts', appId, 'public', 'data', 'employees', formData.id);
         await updateDoc(ref, formData);
       } else {
+        // Generate a new unique ID for the barcode field
+        const newBarcode = generateUniqueId(employees);
+
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), {
           ...formData,
+          barcode: newBarcode, // Save the generated ID
           balance: 0,
           totalHours: 0,
           isCheckedIn: false,
@@ -1192,6 +1306,12 @@ function EmployeesTab({ employees, attendance, user }) {
         content={geminiResult?.content}
         isLoading={geminiLoading}
       />
+      {showBarcode && (
+        <BarcodeDisplayModal 
+          employee={showBarcode} 
+          onClose={() => setShowBarcode(null)} 
+        />
+      )}
 
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="relative">
@@ -1218,7 +1338,12 @@ function EmployeesTab({ employees, attendance, user }) {
             <h3 className="text-xl font-bold mb-4">{formData.id ? 'Edit' : 'New'} Employee</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div><label className="text-sm font-medium">Name</label><input required className="w-full p-2 border rounded" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
-              <div><label className="text-sm font-medium">Barcode</label><input required className="w-full p-2 border rounded font-mono" value={formData.barcode} onChange={e=>setFormData({...formData, barcode: e.target.value})} /></div>
+              {/* Barcode input remains hidden as it is auto-generated upon creation */}
+              {!formData.id && 
+                <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 italic">
+                  *Barcode ID will be automatically generated upon creation.
+                </div>
+              }
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-sm font-medium">Rate (€)</label><input required type="number" className="w-full p-2 border rounded" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
                 <div><label className="text-sm font-medium">Status</label><select className="w-full p-2 border rounded" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div>
@@ -1241,6 +1366,7 @@ function EmployeesTab({ employees, attendance, user }) {
               <p className="text-sm text-slate-500">Bal: {formatCurrency(emp.balance || 0)}</p>
             </div>
             <div className="flex gap-2">
+              <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg" title="Generate Barcode"><Barcode size={16} /></button>
               <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Sparkles size={16} /></button>
               <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg"><Edit size={16} /></button>
               <button onClick={() => { if(confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg"><Trash2 size={16} /></button>
