@@ -179,48 +179,30 @@ const generateUniqueId = (employees) => {
   return String(newId);
 };
 
-// --- Simplified SVG Barcode Visualization (Non-encoding) ---
+// --- External Barcode Image URL ---
+const getBarcodeUrl = (code) => {
+    // Using a common, free image chart API for Code 128 barcode generation
+    // Parameters: cht=barcode (Chart Type), chld=C (Code 128 encoding), chs=300x100 (Size), chd=t:{data}
+    const apiUrl = `https://chart.googleapis.com/chart?cht=barcode&chs=300x100&chld=C&chd=t:${code}`;
+    return apiUrl;
+}
+
+// --- Barcode Visualization using External Image ---
 const BarcodeVisualization = ({ code }) => {
-    // Generates a simple, readable bar pattern based on the length and characters of the code.
-    const barWidth = 3;
-    const barHeight = 60;
-    
-    let segments = [];
-    let currentX = 0;
-    
-    // Use the numeric value of the characters to determine bar width/color pseudo-randomly
-    const input = code.padEnd(10, '0'); // Ensure minimum length for visibility
-
-    for (let i = 0; i < input.length * 2; i++) {
-        const isBlack = i % 2 === 0;
-        const charIndex = Math.floor(i / 2);
-        const charValue = input.charCodeAt(charIndex) || 70;
-        const width = (charValue % 4) + 5; // Width variation 5-8 px
-
-        segments.push(
-            `<rect x="${currentX}" y="0" width="${width}" height="${barHeight}" fill="${isBlack ? 'black' : 'white'}" />`
-        );
-        currentX += width;
-    }
-    
-    const totalWidth = currentX;
+    const url = getBarcodeUrl(code);
 
     return (
-        <div className="flex flex-col items-center p-4 bg-white rounded-lg border border-slate-200">
-            <svg width="100%" height={barHeight + 20} viewBox={`0 0 ${totalWidth} ${barHeight + 20}`} xmlns="http://www.w3.org/2000/svg" className="max-w-xs">
-                <g transform="translate(0, 10)">
-                    {segments.join('')}
-                    <text x="${totalWidth / 2}" y="${barHeight + 15}" 
-                          font-family="monospace, sans-serif" 
-                          font-size="12" 
-                          text-anchor="middle" 
-                          fill="black"
-                          className="font-bold">
-                        {code}
-                    </text>
-                </g>
-            </svg>
-            <p className="text-xs text-slate-500 mt-2 italic">Scannable ID: {code}</p>
+        <div className="flex flex-col items-center p-4 bg-white rounded-lg border border-slate-200 w-full max-w-sm">
+            <img 
+                src={url} 
+                alt={`Barcode for ID ${code}`}
+                className="w-full h-auto max-w-xs object-contain"
+                onError={(e) => {
+                    e.target.onerror = null; 
+                    e.target.src = "https://placehold.co/300x100/eeeeee/333333?text=BARCODE+FAILED";
+                }}
+            />
+            <p className="text-sm text-slate-600 mt-3 font-mono">ID: <span className="font-bold text-cyan-700">{code}</span></p>
         </div>
     );
 };
@@ -298,6 +280,8 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
 function BarcodeDisplayModal({ employee, onClose }) {
     if (!employee) return null;
 
+    const barcodeUrl = getBarcodeUrl(employee.barcode);
+
     return (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -312,7 +296,7 @@ function BarcodeDisplayModal({ employee, onClose }) {
                     </div>
 
                     <p className="text-slate-600 mb-6">
-                        This is the unique ID used for the scanner portal. Generate and distribute this code for quick clock-in/out.
+                        This barcode image is generated using the unique ID and the Code 128 format for reliable scanning.
                     </p>
 
                     <div className="flex justify-center mb-6">
@@ -321,13 +305,15 @@ function BarcodeDisplayModal({ employee, onClose }) {
 
                     <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
                         <h4 className="font-semibold text-cyan-800 flex items-center gap-2">
-                            <AlertTriangle size={16} /> Production Note
+                            <Download size={16} /> Direct URL for Distribution
                         </h4>
                         <p className="text-sm text-cyan-700 mt-2">
-                            For guaranteed scannability and EAN 128 compliance, you must use the ID below with a dedicated external Barcode API (e.g., Google Charts, Barcode Generator Service) to generate a high-resolution, encoded image before sending it to your employees.
+                            You can send this direct link to your employees to ensure they receive the high-resolution, scannable image:
                         </p>
-                        <p className="text-sm text-cyan-700 mt-2 font-mono break-all">
-                            Unique ID: <span className="font-bold text-lg text-cyan-900">{employee.barcode}</span>
+                        <p className="text-sm text-cyan-700 mt-2 font-mono break-all text-xs">
+                           <a href={barcodeUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-900">
+                              {barcodeUrl}
+                           </a>
                         </p>
                     </div>
                     
@@ -1259,7 +1245,14 @@ function EmployeesTab({ employees, attendance, user }) {
     try {
       if (formData.id) {
         const ref = doc(db, 'artifacts', appId, 'public', 'data', 'employees', formData.id);
-        await updateDoc(ref, formData);
+        
+        // If editing and barcode is missing, generate one now
+        const finalFormData = { ...formData };
+        if (!finalFormData.barcode || finalFormData.barcode === 0) {
+            finalFormData.barcode = generateUniqueId(employees);
+        }
+
+        await updateDoc(ref, finalFormData);
       } else {
         // Generate a new unique ID for the barcode field
         const newBarcode = generateUniqueId(employees);
@@ -1295,7 +1288,7 @@ function EmployeesTab({ employees, attendance, user }) {
     setGeminiLoading(false);
   };
 
-  const filtered = employees.filter(e => e.name.toLowerCase().includes(search.toLowerCase()) || e.barcode.includes(search));
+  const filtered = employees.filter(e => e.name.toLowerCase().includes(search.toLowerCase()) || e.barcode?.includes(search));
 
   return (
     <div className="space-y-6">
@@ -1318,7 +1311,7 @@ function EmployeesTab({ employees, attendance, user }) {
             <Search className="absolute left-3 top-3 text-slate-400" size={18} />
             <input 
                type="text" 
-               placeholder="Search..." 
+               placeholder="Search by name or code..." 
                value={search}
                onChange={(e) => setSearch(e.target.value)}
                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg w-full sm:w-64"
@@ -1338,12 +1331,17 @@ function EmployeesTab({ employees, attendance, user }) {
             <h3 className="text-xl font-bold mb-4">{formData.id ? 'Edit' : 'New'} Employee</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div><label className="text-sm font-medium">Name</label><input required className="w-full p-2 border rounded" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
-              {/* Barcode input remains hidden as it is auto-generated upon creation */}
-              {!formData.id && 
+              
+              {formData.id && formData.barcode ? (
+                 <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 font-mono flex justify-between items-center">
+                    Barcode ID: <span className="font-bold text-cyan-700">{formData.barcode}</span>
+                 </div>
+              ) : (
                 <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 italic">
-                  *Barcode ID will be automatically generated upon creation.
+                  *Barcode ID will be automatically generated upon saving.
                 </div>
-              }
+              )}
+              
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-sm font-medium">Rate (€)</label><input required type="number" className="w-full p-2 border rounded" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
                 <div><label className="text-sm font-medium">Status</label><select className="w-full p-2 border rounded" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div>
@@ -1366,7 +1364,11 @@ function EmployeesTab({ employees, attendance, user }) {
               <p className="text-sm text-slate-500">Bal: {formatCurrency(emp.balance || 0)}</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg" title="Generate Barcode"><Barcode size={16} /></button>
+              {emp.barcode && (
+                 <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg" title="Generate Barcode">
+                    <Barcode size={16} />
+                 </button>
+              )}
               <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Sparkles size={16} /></button>
               <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg"><Edit size={16} /></button>
               <button onClick={() => { if(confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg"><Trash2 size={16} /></button>
