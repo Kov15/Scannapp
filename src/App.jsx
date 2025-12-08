@@ -83,7 +83,7 @@ const appId = 'aqua-v1';
 /* -------------------------------------------------------------------------- */
 
 const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-IE', { // Changed to Irish English for Euro formatting
+  return new Intl.NumberFormat('en-IE', { 
     style: 'currency',
     currency: 'EUR',
   }).format(amount || 0);
@@ -247,9 +247,15 @@ export default function AquaTimeControl() {
   // 1. Firebase Auth (Background Connection)
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth failed, falling back to anonymous:", error);
+        // Fallback if the token is invalid
         await signInAnonymously(auth);
       }
     };
@@ -458,7 +464,8 @@ function ScannerMode({ user }) {
   
   useEffect(() => {
     if (!user) return;
-    const q = collection(db, 'artifacts', appId, 'users', user.uid, 'employees');
+    // NOTE: Uses public data
+    const q = collection(db, 'artifacts', appId, 'public', 'data', 'employees');
     const unsub = onSnapshot(q, (snapshot) => {
       setEmployees(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => console.error(err));
@@ -507,7 +514,7 @@ function ScannerMode({ user }) {
         earnedAmount = hoursWorked * (parseFloat(employee.hourlyRate) || 0);
       }
 
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'attendance'), {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
         employeeId: employee.id,
         employeeName: employee.name, 
         timestamp: timestamp,
@@ -516,7 +523,7 @@ function ScannerMode({ user }) {
         earnedAmount: isCheckIn ? 0 : earnedAmount
       });
 
-      const employeeRef = doc(db, 'artifacts', appId, 'users', user.uid, 'employees', employee.id);
+      const employeeRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', employee.id);
       await updateDoc(employeeRef, {
         isCheckedIn: isCheckIn,
         lastCheckInTime: isCheckIn ? timestamp : null,
@@ -622,12 +629,13 @@ function AdminDashboard({ user, navigate }) {
   
   useEffect(() => {
     if (!user) return;
-    const empUnsub = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'employees'), 
+    // NOTE: Uses public data
+    const empUnsub = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), 
       (snap) => setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
       (err) => console.error("Emp Error", err)
     );
     // Fetch last 1000 logs for analytics
-    const attQuery = query(collection(db, 'artifacts', appId, 'users', user.uid, 'attendance'), orderBy('timestamp', 'desc'), limit(1000));
+    const attQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), orderBy('timestamp', 'desc'), limit(1000));
     const attUnsub = onSnapshot(attQuery,
       (snap) => setAttendance(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
       (err) => console.error("Att Error", err)
@@ -1042,7 +1050,8 @@ function OverviewTab({ employees, attendance, user }) {
          if (emp.lastCheckInTime) {
              hours = (new Date().getTime() - new Date(emp.lastCheckInTime).getTime()) / (1000 * 60 * 60);
          }
-         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'attendance'), {
+         // NOTE: Changed to 'public/data' for shared access
+         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
              employeeId: emp.id,
              employeeName: emp.name,
              timestamp,
@@ -1051,7 +1060,8 @@ function OverviewTab({ employees, attendance, user }) {
              earnedAmount: hours * (emp.hourlyRate || 0),
              note: 'Admin Forced'
          });
-         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'employees', emp.id), {
+         // NOTE: Changed to 'public/data' for shared access
+         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id), {
              isCheckedIn: false,
              lastCheckInTime: null,
              balance: (emp.balance || 0) + (hours * (emp.hourlyRate || 0)),
@@ -1136,11 +1146,12 @@ function EmployeesTab({ employees, attendance, user }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // NOTE: Changed to 'public/data' for shared access
       if (formData.id) {
-        const ref = doc(db, 'artifacts', appId, 'users', user.uid, 'employees', formData.id);
+        const ref = doc(db, 'artifacts', appId, 'public', 'data', 'employees', formData.id);
         await updateDoc(ref, formData);
       } else {
-        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'employees'), {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), {
           ...formData,
           balance: 0,
           totalHours: 0,
@@ -1232,7 +1243,7 @@ function EmployeesTab({ employees, attendance, user }) {
             <div className="flex gap-2">
               <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Sparkles size={16} /></button>
               <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg"><Edit size={16} /></button>
-              <button onClick={() => { if(confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg"><Trash2 size={16} /></button>
+              <button onClick={() => { if(confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg"><Trash2 size={16} /></button>
             </div>
           </div>
         ))}
@@ -1276,7 +1287,8 @@ function PayrollTab({ employees, user }) {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'payments'), orderBy('date', 'desc'), limit(100));
+    // NOTE: Changed to 'public/data' for shared access
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'payments'), orderBy('date', 'desc'), limit(100));
     const unsub = onSnapshot(q, (snap) => setPayments(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     return () => unsub();
   }, [user?.uid]);
@@ -1284,14 +1296,16 @@ function PayrollTab({ employees, user }) {
   const handlePayment = async (e) => {
     e.preventDefault();
     if (!selectedEmp) return;
-    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'payments'), {
+    // NOTE: Changed to 'public/data' for shared access
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payments'), {
       employeeId: selectedEmp.id,
       employeeName: selectedEmp.name,
       amount: parseFloat(payForm.amount),
       date: new Date().toISOString(),
       note: payForm.note
     });
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'employees', selectedEmp.id), {
+    // NOTE: Changed to 'public/data' for shared access
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', selectedEmp.id), {
       balance: (selectedEmp.balance || 0) - parseFloat(payForm.amount)
     });
     setIsPaying(false);
@@ -1348,7 +1362,8 @@ function AbsencesTab({ employees, user }) {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'absences'), orderBy('date', 'desc'));
+    // NOTE: Changed to 'public/data' for shared access
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'absences'), orderBy('date', 'desc'));
     const unsub = onSnapshot(q, (snap) => setAbsences(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     return () => unsub();
   }, [user?.uid]);
@@ -1357,7 +1372,8 @@ function AbsencesTab({ employees, user }) {
     e.preventDefault();
     const emp = employees.find(e => e.id === form.employeeId);
     if (!emp) return;
-    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'absences'), { ...form, employeeName: emp.name });
+    // NOTE: Changed to 'public/data' for shared access
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'), { ...form, employeeName: emp.name });
     setShowModal(false);
   };
   
