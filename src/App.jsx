@@ -59,11 +59,19 @@ const ADMIN_CONFIG = {
   sessionDuration: 12 * 60 * 60 * 1000 // 12 hours in ms
 };
 
-const firebaseConfig = JSON.parse(__firebase_config);
+const firebaseConfig = {
+apiKey: "AIzaSyBuo6fP2vgnRNTXetaeH9Po10545rDbr9s",
+authDomain: "aquascanapp.firebaseapp.com",
+projectId: "aquascanapp",
+storageBucket: "aquascanapp.firebasestorage.app",
+messagingSenderId: "716371620836",
+appId: "1:716371620836:web:038d97ff8ea6e6b03a4df1",
+measurementId: "G-MVLXM5RHWN"
+};
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const appId = 'aqua-v1';
 
 /* -------------------------------------------------------------------------- */
 /* UTILITIES & GEMINI API                      */
@@ -82,7 +90,7 @@ const calculateHours = (ms) => {
 
 // Gemini API Integration
 const callGemini = async (prompt) => {
-  const apiKey = ""; // Runtime environment provides key
+  const apiKey = "AIzaSyBxo61DEjt0WerbLY9_jSW_WhTtpYJ4VJA"; // Runtime environment provides key
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
