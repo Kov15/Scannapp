@@ -835,8 +835,8 @@ function EmployeesTab({ employees, attendance, user }) {
     const context = `
       Employee Name: ${emp.name}
       Total Hours: ${emp.totalHours?.toFixed(2) || 0}
-      Rate: $${emp.hourlyRate}
-      Balance: $${emp.balance || 0}
+      Rate: €${emp.hourlyRate}
+      Balance: €${emp.balance || 0}
       Logs: ${empLogs.map(l => `${l.action} ${l.timestamp}`).join(', ')}
     `;
     const prompt = `Act as HR Analyst. Analyze employee ${emp.name}. Summarize punctuality and consistency in 3 sentences. Data: ${context}`;
