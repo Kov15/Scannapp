@@ -884,7 +884,7 @@ function EmployeesTab({ employees, attendance, user }) {
               <div><label className="text-sm font-medium">Name</label><input required className="w-full p-2 border rounded" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
               <div><label className="text-sm font-medium">Barcode</label><input required className="w-full p-2 border rounded font-mono" value={formData.barcode} onChange={e=>setFormData({...formData, barcode: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium">Rate ($)</label><input required type="number" className="w-full p-2 border rounded" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
+                <div><label className="text-sm font-medium">Rate (€)</label><input required type="number" className="w-full p-2 border rounded" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
                 <div><label className="text-sm font-medium">Status</label><select className="w-full p-2 border rounded" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
