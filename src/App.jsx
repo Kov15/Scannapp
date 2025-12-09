@@ -181,8 +181,9 @@ const generateUniqueId = (employees) => {
 
 // --- External Barcode Image URL ---
 const getBarcodeUrl = (code) => {
-    // Using barcodeapi.org for Code 128 generation
-    const apiUrl = `https://barcodeapi.org/api/code128/${code}`;
+    // Pad the 5-digit code to a 12-digit EAN base number, which barcodeapi.org will use to generate the 13th check digit.
+    const paddedCode = String(code).padStart(12, '0');
+    const apiUrl = `https://barcodeapi.org/api/ean13/${paddedCode}`;
     return apiUrl;
 }
 
@@ -194,7 +195,7 @@ const BarcodeVisualization = ({ code }) => {
         <div className="flex flex-col items-center p-4 bg-white rounded-lg border border-slate-200 w-full max-w-sm">
             <img 
                 src={url} 
-                alt={`Barcode for ID ${code}`}
+                alt={`EAN-13 Barcode for ID ${code}`}
                 className="w-full h-auto max-w-xs object-contain"
                 // Fallback for when the external API fails to load the image
                 onError={(e) => {
@@ -202,7 +203,7 @@ const BarcodeVisualization = ({ code }) => {
                     e.target.src = "https://placehold.co/300x100/f87171/ffffff?text=API+BARCODE+FAILED";
                 }}
             />
-            <p className="text-sm text-slate-600 mt-3 font-mono">ID: <span className="font-bold text-cyan-700">{code}</span></p>
+            <p className="text-sm text-slate-600 mt-3 font-mono">Original ID: <span className="font-bold text-cyan-700">{code}</span></p>
         </div>
     );
 };
@@ -296,8 +297,7 @@ function BarcodeDisplayModal({ employee, onClose }) {
                     </div>
 
                     <p className="text-slate-600 mb-6">
-                        This barcode image is generated dynamically using the **barcodeapi.org** service and the Code 128 format.
-                        It should be scannable by specialized readers and modern smartphones.
+                        This barcode image uses the **EAN-13** standard (13 digits), generated dynamically via **barcodeapi.org**. Your 5-digit ID is padded with zeros to fit the required 12-digit base number.
                     </p>
 
                     <div className="flex justify-center mb-6">
@@ -1333,15 +1333,23 @@ function EmployeesTab({ employees, attendance, user }) {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div><label className="text-sm font-medium">Name</label><input required className="w-full p-2 border rounded" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
               
-              {formData.id && formData.barcode ? (
-                 <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 font-mono flex justify-between items-center">
-                    Barcode ID: <span className="font-bold text-cyan-700">{formData.barcode}</span>
-                 </div>
-              ) : (
-                <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 italic">
-                  *Barcode ID will be automatically generated upon saving.
-                </div>
-              )}
+              {/* Barcode ID input, now editable */}
+              <div>
+                  <label className="text-sm font-medium">Barcode ID</label>
+                  <input 
+                      required 
+                      className="w-full p-2 border rounded font-mono disabled:bg-slate-100 disabled:cursor-not-allowed" 
+                      value={formData.barcode} 
+                      onChange={e => setFormData({ ...formData, barcode: e.target.value })} 
+                      placeholder="e.g. 10001 (Must be unique)"
+                      disabled={!formData.id && (formData.barcode === '' || formData.barcode === 0)}
+                  />
+                  {!formData.id && (
+                      <p className="text-xs text-slate-500 mt-1">
+                          *ID is automatically generated upon saving.
+                      </p>
+                  )}
+              </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-sm font-medium">Rate (€)</label><input required type="number" className="w-full p-2 border rounded" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
