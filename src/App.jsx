@@ -51,7 +51,7 @@ import {
   Activity, 
   PieChart,
   Calendar,
-  Barcode,
+  QrCode, // Changed from Barcode to QrCode icon
   Sun,
   Moon
 } from 'lucide-react';
@@ -171,7 +171,7 @@ const callGemini = async (prompt) => {
   }
 };
 
-// --- Unique ID Generator for Barcode String ---
+// --- Unique ID Generator for QR Code String (5 digits) ---
 const generateUniqueId = (employees) => {
   const existingCodes = employees.map(e => e.barcode).filter(Boolean);
   let newId = 10001;
@@ -181,34 +181,29 @@ const generateUniqueId = (employees) => {
   return String(newId);
 };
 
-// --- External Barcode Image URL ---
-const getBarcodeUrl = (code) => {
-    // Pad the 5-digit code to a 12-digit EAN base number
-    const paddedCode = String(code).padStart(12, '0');
-    
-    // EAN13 format with human-readable numbers (as requested)
-    const apiUrl = `https://barcodeapi.org/api/ean13/${paddedCode}`;
+// --- External QR Code Image URL (Using QuickChart) ---
+const getQrCodeUrl = (code) => {
+    // QuickChart API is a reliable alternative for QR codes
+    const apiUrl = `https://quickchart.io/qr?text=${encodeURIComponent(code)}&size=200`;
     return apiUrl;
 }
 
-// --- Barcode Visualization using External Image ---
-const BarcodeVisualization = ({ code }) => {
-    const url = getBarcodeUrl(code);
+// --- QR Code Visualization using External Image ---
+const QrCodeVisualization = ({ code }) => {
+    const url = getQrCodeUrl(code);
 
     return (
         <div className="flex flex-col items-center p-4 bg-white rounded-lg border border-slate-200 w-full max-w-sm">
             <img 
                 src={url} 
-                alt={`EAN-13 Barcode for ID ${code}`}
-                className="w-full h-auto max-w-xs object-contain"
-                // Fallback for when the external API fails to load the image
+                alt={`QR Code for ID ${code}`}
+                className="w-full h-auto max-w-xs object-contain p-2 bg-white rounded-lg shadow-md"
                 onError={(e) => {
                     e.target.onerror = null; 
-                    // Using internal placeholder image for guaranteed display
-                    e.target.src = `https://placehold.co/300x100/f87171/ffffff?text=API+BARCODE+FAILED`;
+                    e.target.src = `https://placehold.co/200x200/f87171/ffffff?text=QR+CODE+FAILED`;
                 }}
             />
-            <p className="text-sm text-slate-600 mt-3 font-mono">Original ID: <span className="font-bold text-cyan-700">{code}</span></p>
+            <p className="text-sm text-slate-600 mt-3 font-mono">Employee ID: <span className="font-bold text-cyan-700">{code}</span></p>
         </div>
     );
 };
@@ -280,13 +275,13 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* BARCODE MODAL COMPONENT                     */
+/* QR CODE MODAL COMPONENT                     */
 /* -------------------------------------------------------------------------- */
 
-function BarcodeDisplayModal({ employee, onClose }) {
+function QrCodeDisplayModal({ employee, onClose }) {
     if (!employee) return null;
 
-    const barcodeUrl = getBarcodeUrl(employee.barcode);
+    const qrCodeUrl = getQrCodeUrl(employee.barcode);
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -294,7 +289,7 @@ function BarcodeDisplayModal({ employee, onClose }) {
                 <div className="p-6">
                     <div className="flex justify-between items-start mb-4">
                         <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                            <Barcode size={24} className="text-cyan-600"/> Employee Code: {employee.name}
+                            <QrCode size={24} className="text-cyan-600"/> Employee QR Code: {employee.name}
                         </h3>
                         <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 transition-colors">
                             <X size={20} className="text-slate-500" />
@@ -302,11 +297,11 @@ function BarcodeDisplayModal({ employee, onClose }) {
                     </div>
 
                     <p className="text-slate-600 mb-6">
-                        This barcode image uses the **EAN-13** standard (13 digits), generated dynamically via **barcodeapi.org**.
+                        This QR code encodes the 5-digit Employee ID and is highly reliable for scanning with mobile devices at the Kiosk.
                     </p>
 
                     <div className="flex justify-center mb-6">
-                        <BarcodeVisualization code={employee.barcode} />
+                        <QrCodeVisualization code={employee.barcode} />
                     </div>
 
                     <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
@@ -317,8 +312,8 @@ function BarcodeDisplayModal({ employee, onClose }) {
                             Use this direct link to share the high-resolution image with employees:
                         </p>
                         <p className="text-sm text-cyan-700 font-mono break-all text-xs mt-2">
-                           <a href={barcodeUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-900">
-                              {barcodeUrl}
+                           <a href={qrCodeUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-900">
+                              {qrCodeUrl}
                            </a>
                         </p>
                     </div>
@@ -343,7 +338,6 @@ export default function AquaTimeControl() {
   const [loading, setLoading] = useState(true);
   const { route, navigate } = useHashRoute();
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  // Removed Dark Mode State and Logic
 
   // 1. Firebase Auth (Background Connection)
   useEffect(() => {
@@ -592,13 +586,14 @@ function ScannerMode({ user }) {
     // FIX: Scanner reads 12 digits (EAN-13 minus first digit).
     // The employee ID is 5 digits, stored as '10001', '10002', etc.
     // We extract the 5 digits corresponding to positions 7, 8, 9, 10, 11 of the 12-digit output.
-    // In a 12-character string (0-indexed), this is slice(6, 11).
     if (scannedCode.length !== 12) {
         showFeedback('error', 'Scanner input must be 12 digits.');
         return;
     }
     
-    const scannedIDSegment = scannedCode.slice(6, 11); // Extracts characters at index 6, 7, 8, 9, 10
+    // Scans 12 digits (D2 through D13).
+    // In a 12-character input stream (0-indexed), slice(6, 11) extracts indices 6, 7, 8, 9, 10.
+    const scannedIDSegment = scannedCode.slice(6, 11);
     
     // Find employee using the 5-digit segment
     const employee = employees.find(emp => emp.barcode === scannedIDSegment && emp.status === 'Active');
@@ -1329,7 +1324,7 @@ function EmployeesTab({ employees, attendance, user }) {
         isLoading={geminiLoading}
       />
       {showBarcode && (
-        <BarcodeDisplayModal 
+        <QrCodeDisplayModal // Switched to QrCodeDisplayModal
           employee={showBarcode} 
           onClose={() => setShowBarcode(null)} 
         />
@@ -1363,7 +1358,7 @@ function EmployeesTab({ employees, attendance, user }) {
               
               {/* Barcode ID input, now editable */}
               <div>
-                  <label className="text-sm font-medium text-slate-700">Barcode ID (5 Digits)</label>
+                  <label className="text-sm font-medium text-slate-700">QR Code ID (5 Digits)</label>
                   <input 
                       required 
                       type="number"
@@ -1373,7 +1368,7 @@ function EmployeesTab({ employees, attendance, user }) {
                       placeholder="e.g. 10001 (Must be unique)"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                      This 5-digit code is the key for the scanner. Use it with the external API link below.
+                      This 5-digit code is the key for the scanner. It is encoded directly in the QR code.
                   </p>
               </div>
               
@@ -1400,8 +1395,8 @@ function EmployeesTab({ employees, attendance, user }) {
             </div>
             <div className="flex gap-2">
               {emp.barcode && (
-                 <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg" title="Generate Barcode">
-                    <Barcode size={16} />
+                 <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg" title="Generate QR Code">
+                    <QrCode size={16} />
                  </button>
               )}
               <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Sparkles size={16} /></button>
