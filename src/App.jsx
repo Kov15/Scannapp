@@ -186,7 +186,7 @@ const getBarcodeUrl = (code) => {
     // Pad the 5-digit code to a 12-digit EAN base number
     const paddedCode = String(code).padStart(12, '0');
     
-    // NOTE: Removed 'text=0' parameter to show human-readable text
+    // EAN13 format with human-readable numbers
     const apiUrl = `https://barcodeapi.org/api/ean13/${paddedCode}`;
     return apiUrl;
 }
