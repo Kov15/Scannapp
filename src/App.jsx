@@ -181,9 +181,11 @@ const generateUniqueId = (employees) => {
 
 // --- External Barcode Image URL ---
 const getBarcodeUrl = (code) => {
-    // Pad the 5-digit code to a 12-digit EAN base number, which barcodeapi.org will use to generate the 13th check digit.
+    // Pad the 5-digit code to a 12-digit EAN base number
     const paddedCode = String(code).padStart(12, '0');
-    const apiUrl = `https://barcodeapi.org/api/ean13/${paddedCode}`;
+    
+    // NOTE: Added 'text=0' parameter to suppress human-readable text
+    const apiUrl = `https://barcodeapi.org/api/ean13/${paddedCode}?text=0`;
     return apiUrl;
 }
 
@@ -297,7 +299,7 @@ function BarcodeDisplayModal({ employee, onClose }) {
                     </div>
 
                     <p className="text-slate-600 mb-6">
-                        This barcode image uses the **EAN-13** standard (13 digits), generated dynamically via **barcodeapi.org**. Your 5-digit ID is padded with zeros to fit the required 12-digit base number.
+                        This barcode image uses the **EAN-13** standard (13 digits), generated dynamically via **barcodeapi.org**. The text label below the code has been removed.
                     </p>
 
                     <div className="flex justify-center mb-6">
