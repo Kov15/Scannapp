@@ -129,7 +129,7 @@ const SimpleBarChart = ({ data, labels, color = "#0891b2" }) => {
     <div className="flex items-end justify-between h-40 gap-2 w-full">
       {data.map((val, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
-          <div className="relative w-full bg-slate-100 rounded-t-md overflow-hidden flex items-end h-full">
+          <div className="relative w-full bg-slate-100 dark:bg-slate-700 rounded-t-md overflow-hidden flex items-end h-full">
              <div 
                className="w-full transition-all duration-700 ease-out relative group-hover:opacity-90"
                style={{ height: `${(val / max) * 100}%`, backgroundColor: color }}
@@ -139,7 +139,7 @@ const SimpleBarChart = ({ data, labels, color = "#0891b2" }) => {
                {val.toFixed(1)} hrs
              </div>
           </div>
-          <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider truncate w-full text-center">{labels[i]}</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider truncate w-full text-center">{labels[i]}</span>
         </div>
       ))}
     </div>
@@ -193,17 +193,17 @@ const QrCodeVisualization = ({ code }) => {
     const url = getQrCodeUrl(code);
 
     return (
-        <div className="flex flex-col items-center p-4 bg-white rounded-lg border border-slate-200 w-full max-w-sm">
+        <div className="flex flex-col items-center p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 w-full max-w-sm">
             <img 
                 src={url} 
                 alt={`QR Code for ID ${code}`}
-                className="w-full h-auto max-w-xs object-contain p-2 bg-white rounded-lg shadow-md"
+                className="w-full h-auto max-w-xs object-contain p-2 bg-white dark:bg-slate-800 rounded-lg shadow-md"
                 onError={(e) => {
                     e.target.onerror = null; 
                     e.target.src = `https://placehold.co/200x200/f87171/ffffff?text=QR+CODE+FAILED`;
                 }}
             />
-            <p className="text-sm text-slate-600 mt-3 font-mono">Employee ID: <span className="font-bold text-cyan-700">{code}</span></p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-3 font-mono">Employee ID: <span className="font-bold text-cyan-700">{code}</span></p>
         </div>
     );
 };
@@ -239,7 +239,7 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-4 flex justify-between items-center text-white">
           <div className="flex items-center gap-2">
             <Sparkles size={20} className="text-yellow-300" />
@@ -258,7 +258,7 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
             </div>
           ) : (
             <div className="prose prose-indigo max-w-none">
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-slate-700 whitespace-pre-wrap leading-relaxed text-sm max-h-[60vh] overflow-y-auto">
+              <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-xl border border-slate-100 dark:border-slate-600 text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed text-sm max-h-[60vh] overflow-y-auto">
                 {content}
               </div>
               <div className="mt-4 flex justify-end gap-2">
@@ -285,18 +285,18 @@ function QrCodeDisplayModal({ employee, onClose }) {
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="p-6">
                     <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
                             <QrCode size={24} className="text-cyan-600"/> Employee QR Code: {employee.name}
                         </h3>
-                        <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 transition-colors">
-                            <X size={20} className="text-slate-500" />
+                        <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                            <X size={20} className="text-slate-500 dark:text-slate-400" />
                         </button>
                     </div>
 
-                    <p className="text-slate-600 mb-6">
+                    <p className="text-slate-600 dark:text-slate-400 mb-6">
                         This QR code encodes the 5-digit Employee ID and is highly reliable for scanning with mobile devices at the Kiosk.
                     </p>
 
@@ -304,16 +304,16 @@ function QrCodeDisplayModal({ employee, onClose }) {
                         <QrCodeVisualization code={employee.barcode} />
                     </div>
 
-                    <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
-                        <h4 className="font-semibold text-cyan-800 flex items-center gap-2">
+                    <div className="bg-cyan-50 dark:bg-cyan-900/50 p-4 rounded-lg border border-cyan-200 dark:border-cyan-700">
+                        <h4 className="font-semibold text-cyan-800 dark:text-cyan-300 flex items-center gap-2">
                             <Download size={16} /> Generated Code Link
                         </h4>
-                        <p className="text-sm text-cyan-700 mt-2">
+                        <p className="text-sm text-cyan-700 dark:text-cyan-400 mt-2">
                             Use this direct link to share the high-resolution image with employees:
                         </p>
-                        <p className="text-sm text-cyan-700 font-mono break-all text-xs mt-2">
-                           <a href={qrCodeUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-900">
-                              {qrCodeUrl}
+                        <p className="text-sm text-cyan-700 dark:text-cyan-400 font-mono break-all text-xs mt-2">
+                           <a href={getQrCodeUrl(employee.barcode)} target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-900">
+                              {getQrCodeUrl(employee.barcode)}
                            </a>
                         </p>
                     </div>
@@ -338,6 +338,7 @@ export default function AquaTimeControl() {
   const [loading, setLoading] = useState(true);
   const { route, navigate } = useHashRoute();
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false); // New Dark Mode state
 
   // 1. Firebase Auth (Background Connection)
   useEffect(() => {
@@ -382,9 +383,26 @@ export default function AquaTimeControl() {
       }
     };
     checkSession();
+    // Initialize dark mode preference from local storage
+    const storedMode = localStorage.getItem('aqua_dark_mode');
+    if (storedMode) {
+      setIsDarkMode(storedMode === 'true');
+    }
   }, [route]); 
 
-  // 3. Routing Logic
+  // 3. Dark Mode Toggle Effect (FIXED: Uses class toggle on root)
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.add('dark');
+      localStorage.setItem('aqua_dark_mode', 'true');
+    } else {
+      root.classList.remove('dark');
+      localStorage.setItem('aqua_dark_mode', 'false');
+    }
+  }, [isDarkMode]);
+
+  // 4. Routing Logic
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-900 text-cyan-400">
@@ -398,7 +416,7 @@ export default function AquaTimeControl() {
 
   if (route.startsWith('/admin')) {
     if (!isAdminAuthenticated) return <AdminLogin navigate={navigate} />;
-    return <AdminDashboard user={user} navigate={navigate} />;
+    return <AdminDashboard user={user} navigate={navigate} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;
   }
 
   if (route === '/login') return <AdminLogin navigate={navigate} />;
@@ -437,7 +455,7 @@ function AdminLogin({ navigate }) {
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+      <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700">
         <div className="bg-slate-900 p-8 text-center">
            <div className="mx-auto bg-cyan-500/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
              <Lock className="text-cyan-400" size={32} />
@@ -454,24 +472,24 @@ function AdminLogin({ navigate }) {
           )}
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Username</label>
             <input 
               type="text" 
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all"
+              className="w-full p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all"
               placeholder="Enter admin username"
               autoFocus
             />
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Password</label>
             <input 
               type="password" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all"
+              className="w-full p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all"
               placeholder="••••••••"
             />
           </div>
@@ -722,7 +740,7 @@ function ScannerMode({ user }) {
 /* ADMIN DASHBOARD                             */
 /* -------------------------------------------------------------------------- */
 
-function AdminDashboard({ user, navigate }) {
+function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
   const [activeTab, setActiveTab] = useState('analytics'); // Default to Analytics for demo
   const [isSidebarOpen, setSidebarOpen] = useState(true);
 
@@ -757,8 +775,8 @@ function AdminDashboard({ user, navigate }) {
       onClick={() => setActiveTab(id)}
       className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
         activeTab === id 
-        ? 'bg-cyan-500/10 text-cyan-500' 
-        : 'text-slate-500 hover:bg-slate-100'
+        ? 'bg-cyan-500/10 text-cyan-500 dark:bg-cyan-600/20' 
+        : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700'
       }`}
     >
       <Icon size={20} />
@@ -767,12 +785,12 @@ function AdminDashboard({ user, navigate }) {
   );
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-slate-50 dark:bg-gray-900 overflow-hidden">
       {/* Sidebar */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-slate-200 transition-all duration-300 flex flex-col z-20`}>
+      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-all duration-300 flex flex-col z-20`}>
         <div className="p-6 flex items-center justify-between">
-           {isSidebarOpen && <span className="text-xl font-bold text-slate-800 tracking-tight">AQUA<span className="text-cyan-500">.Control</span></span>}
-           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+           {isSidebarOpen && <span className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">AQUA<span className="text-cyan-500">.Control</span></span>}
+           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500">
              {isSidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
            </button>
         </div>
@@ -786,17 +804,25 @@ function AdminDashboard({ user, navigate }) {
           <MenuItem id="absences" icon={CalendarOff} label={isSidebarOpen ? "Absences" : ""} />
         </nav>
 
-        <div className="p-4 border-t border-slate-200">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-700">
           
-          <div className={`flex items-center gap-3 px-4 py-3 mb-2 bg-slate-50 rounded-lg ${!isSidebarOpen && 'hidden'}`}>
+          <button 
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="flex items-center space-x-3 px-4 py-3 w-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 rounded-lg transition-colors mb-2"
+          >
+            {isDarkMode ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} />}
+            {isSidebarOpen && <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>}
+          </button>
+
+          <div className={`flex items-center gap-3 px-4 py-3 mb-2 bg-slate-50 dark:bg-slate-700 rounded-lg ${!isSidebarOpen && 'hidden'}`}>
              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-             <div className="text-xs text-slate-500">
-                <p className="font-semibold text-slate-700">Admin Logged In</p>
+             <div className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="font-semibold text-slate-700 dark:text-slate-200">Admin Logged In</p>
                 <p>Session Active</p>
              </div>
           </div>
           
-          <button onClick={handleLogout} className="flex items-center space-x-3 px-4 py-3 w-full text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+          <button onClick={handleLogout} className="flex items-center space-x-3 px-4 py-3 w-full text-red-500 hover:bg-red-50 dark:hover:bg-red-900/50 dark:text-red-400 rounded-lg transition-colors">
             <LogOut size={20} />
             {isSidebarOpen && <span>Logout</span>}
           </button>
@@ -806,8 +832,8 @@ function AdminDashboard({ user, navigate }) {
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-8">
         <header className="flex justify-between items-center mb-8">
-            <h1 className="text-2xl font-bold text-slate-800 capitalize">{activeTab}</h1>
-            <div className="text-sm text-slate-500">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">{activeTab}</h1>
+            <div className="text-sm text-slate-500 dark:text-slate-400">
                 Welcome, Master Admin
             </div>
         </header>
@@ -1016,16 +1042,16 @@ function AnalyticsTab({ employees, attendance }) {
   return (
     <div className="space-y-6">
       {/* Control Bar */}
-      <div className="flex flex-col xl:flex-row justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
+      <div className="flex flex-col xl:flex-row justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm gap-4">
          
          <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
              {/* Employee Selector */}
              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Users size={16} className="text-slate-400" />
+                <Users size={16} className="text-slate-400 dark:text-slate-500" />
                 <select 
                     value={selectedEmployeeId} 
                     onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-48 font-medium"
+                    className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-48 font-medium"
                 >
                     <option value="all">All Employees</option>
                     {employees.map(emp => (
@@ -1035,14 +1061,14 @@ function AnalyticsTab({ employees, attendance }) {
              </div>
 
              {/* Range Selector */}
-             <div className="flex bg-slate-100 p-1 rounded-lg w-full sm:w-auto">
+             <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg w-full sm:w-auto">
                 {['Week', 'Month', 'Year'].map(r => (
                   <button 
                     key={r}
                     onClick={() => { setRange(r); setCurrentDate(new Date()); }}
                     className={`flex-1 sm:flex-none px-3 py-1 text-sm rounded-md transition-all ${range === r 
-                      ? 'bg-white shadow text-cyan-600' 
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                      ? 'bg-white shadow text-cyan-600 dark:bg-slate-600 dark:text-white' 
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'
                     }`}
                   >
                     {r}
@@ -1052,19 +1078,19 @@ function AnalyticsTab({ employees, attendance }) {
          </div>
 
          {/* Time Travel Controls */}
-         <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
-             <button onClick={() => navigateDate(-1)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
+         <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600">
+             <button onClick={() => navigateDate(-1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors">
                  <ChevronLeft size={20} />
              </button>
-             <span className="font-bold text-slate-700 w-40 text-center text-sm">{metrics.displayTitle}</span>
-             <button onClick={() => navigateDate(1)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
+             <span className="font-bold text-slate-700 dark:text-white w-40 text-center text-sm">{metrics.displayTitle}</span>
+             <button onClick={() => navigateDate(1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors">
                  <ChevronRight size={20} />
              </button>
          </div>
 
          <button 
             onClick={handleExportCSV}
-            className="flex items-center gap-2 text-slate-500 hover:text-cyan-600 px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white w-full xl:w-auto justify-center"
+            className="flex items-center gap-2 text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400 px-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 w-full xl:w-auto justify-center"
          >
             <Download size={16} /> Export CSV
          </button>
@@ -1078,10 +1104,10 @@ function AnalyticsTab({ employees, attendance }) {
            { label: 'Avg Shift', val: metrics.avgShift.toFixed(1) + 'h', icon: BarChart3, color: 'text-purple-600', bg: 'bg-purple-50', sub: 'Per employee' },
            { label: 'Efficiency Score', val: metrics.performanceScore + '%', icon: TrendingUp, color: 'text-orange-600', bg: 'bg-orange-50', sub: 'Based on 8h target' },
         ].map((k, i) => (
-          <div key={i} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-cyan-200 transition-colors">
+          <div key={i} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between hover:border-cyan-200 transition-colors">
              <div className="flex justify-between items-start mb-2">
                 <div>
-                   <p className="text-slate-500 text-sm font-medium">{k.label}</p>
+                   <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{k.label}</p>
                    <h3 className={`text-2xl font-bold ${k.color} mt-1`}>{k.val}</h3>
                 </div>
                 <div className={`p-2 rounded-lg ${k.bg} ${k.color}`}><k.icon size={20} /></div>
@@ -1093,9 +1119,9 @@ function AnalyticsTab({ employees, attendance }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-bold text-slate-800">Hours Distribution ({range})</h3>
+              <h3 className="font-bold text-slate-800 dark:text-white">Hours Distribution ({range})</h3>
               <div className="flex gap-2 text-xs text-slate-500">
                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-cyan-600"></div> Regular</span>
               </div>
@@ -1104,40 +1130,40 @@ function AnalyticsTab({ employees, attendance }) {
         </div>
 
         {/* Breakdown Panel */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-           <h3 className="font-bold text-slate-800 mb-4">Shift Types</h3>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+           <h3 className="font-bold text-slate-800 dark:text-white mb-4">Shift Types</h3>
            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
                  <div className="flex items-center gap-3">
                     <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Clock size={16} /></div>
                     <div>
-                       <p className="font-medium text-sm text-slate-700">Regular Shifts</p>
-                       <p className="text-xs text-slate-500">{metrics.shiftCount} shifts recorded</p>
+                       <p className="font-medium text-sm text-slate-700 dark:text-white">Regular Shifts</p>
+                       <p className="text-xs text-slate-500 dark:text-slate-400">{metrics.shiftCount} shifts recorded</p>
                     </div>
                  </div>
-                 <span className="font-bold text-slate-700">{metrics.totalHours.toFixed(0)}h</span>
+                 <span className="font-bold text-slate-700 dark:text-white">{metrics.totalHours.toFixed(0)}h</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/50 rounded-lg">
                  <div className="flex items-center gap-3">
                     <div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><AlertTriangle size={16} /></div>
                     <div>
-                       <p className="font-medium text-sm text-slate-700">Overtime</p>
-                       <p className="text-xs text-slate-500">Shifts &gt; 8h</p>
+                       <p className="font-medium text-sm text-slate-700 dark:text-white">Overtime</p>
+                       <p className="text-xs text-slate-500 dark:text-slate-400">Shifts &gt; 8h</p>
                     </div>
                  </div>
                  {/* Mock calculation for demo visuals */}
-                 <span className="font-bold text-orange-700">{(metrics.totalHours * 0.15).toFixed(0)}h</span>
+                 <span className="font-bold text-orange-700 dark:text-orange-400">{(metrics.totalHours * 0.15).toFixed(0)}h</span>
               </div>
               
-              <div className="pt-4 border-t border-slate-200">
-                 <h4 className="text-sm font-medium mb-3 text-slate-700">Top Performers (Hours)</h4>
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                 <h4 className="text-sm font-medium mb-3 text-slate-700 dark:text-white">Top Performers (Hours)</h4>
                  {employees
                     .sort((a,b) => (b.totalHours||0) - (a.totalHours||0))
                     .slice(0,3)
                     .map(e => (
                        <div key={e.id} className="flex justify-between items-center text-sm py-1">
-                          <span className="text-slate-600">{e.name}</span>
-                          <span className="font-mono font-medium text-cyan-600">{e.totalHours?.toFixed(1) || 0}h</span>
+                          <span className="text-slate-600 dark:text-slate-300">{e.name}</span>
+                          <span className="font-mono font-medium text-cyan-600 dark:text-cyan-400">{e.totalHours?.toFixed(1) || 0}h</span>
                        </div>
                     ))}
               </div>
@@ -1188,20 +1214,20 @@ function OverviewTab({ employees, attendance, user }) {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <p className="text-slate-500 text-sm mb-1">Currently On-Site</p>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Currently On-Site</p>
           <p className="text-3xl font-bold text-cyan-600">{activeEmployees.length}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <p className="text-slate-500 text-sm mb-1">Total Employees</p>
-          <p className="text-3xl font-bold text-slate-800">{totalEmployees}</p>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Total Employees</p>
+          <p className="text-3xl font-bold text-slate-800 dark:text-white">{totalEmployees}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <p className="text-slate-500 text-sm mb-1">Scans Today</p>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Scans Today</p>
           <p className="text-3xl font-bold text-indigo-600">{todayScans.length}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <p className="text-slate-500 text-sm mb-1">System Status</p>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">System Status</p>
           <div className="flex items-center mt-1 text-green-600 font-medium">
              <CheckCircle2 size={20} className="mr-2" /> Operational
           </div>
@@ -1209,13 +1235,13 @@ function OverviewTab({ employees, attendance, user }) {
       </div>
 
       {/* Active Employees Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-          <h3 className="font-semibold text-slate-800">Currently Checked In</h3>
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+          <h3 className="font-semibold text-slate-800 dark:text-white">Currently Checked In</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-medium text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-medium text-xs">
               <tr>
                 <th className="px-6 py-3">Employee</th>
                 <th className="px-6 py-3">Checked In At</th>
@@ -1223,18 +1249,18 @@ function OverviewTab({ employees, attendance, user }) {
                 <th className="px-6 py-3">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {activeEmployees.length === 0 ? (
-                <tr><td colSpan="4" className="px-6 py-8 text-center text-slate-400">No one is currently active</td></tr>
+                <tr><td colSpan="4" className="px-6 py-8 text-center text-slate-400 dark:text-slate-500">No one is currently active</td></tr>
               ) : activeEmployees.map(emp => {
                 const duration = emp.lastCheckInTime ? calculateHours(Date.now() - new Date(emp.lastCheckInTime).getTime()) : 0;
                 return (
-                  <tr key={emp.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4 font-medium text-slate-800">{emp.name}</td>
-                    <td className="px-6 py-4 text-slate-500">{new Date(emp.lastCheckInTime).toLocaleTimeString()}</td>
-                    <td className="px-6 py-4 text-slate-500">{duration} hrs</td>
+                  <tr key={emp.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                    <td className="px-6 py-4 font-medium text-slate-800 dark:text-white">{emp.name}</td>
+                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{new Date(emp.lastCheckInTime).toLocaleTimeString()}</td>
+                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{duration} hrs</td>
                     <td className="px-6 py-4">
-                       <button onClick={() => handleQuickCheckout(emp)} className="text-xs bg-red-50 text-red-600 px-3 py-1 rounded-full hover:bg-red-100 font-medium">Force Out</button>
+                       <button onClick={() => handleQuickCheckout(emp)} className="text-xs bg-red-50 text-red-600 px-3 py-1 rounded-full hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 font-medium">Force Out</button>
                     </td>
                   </tr>
                 )
@@ -1338,7 +1364,7 @@ function EmployeesTab({ employees, attendance, user }) {
                placeholder="Search by name or code..." 
                value={search}
                onChange={(e) => setSearch(e.target.value)}
-               className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg w-full sm:w-64 text-slate-800"
+               className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg w-full sm:w-64 text-slate-800 dark:text-white"
             />
         </div>
         <button 
@@ -1351,33 +1377,33 @@ function EmployeesTab({ employees, attendance, user }) {
 
       {isEditing && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-            <h3 className="text-xl font-bold mb-4 text-slate-800">{formData.id ? 'Edit' : 'New'} Employee</h3>
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">{formData.id ? 'Edit' : 'New'} Employee</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div><label className="text-sm font-medium text-slate-700">Name</label><input required className="w-full p-2 border rounded bg-slate-50 text-slate-800" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
+              <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Name</label><input required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
               
               {/* Barcode ID input, now editable */}
               <div>
-                  <label className="text-sm font-medium text-slate-700">QR Code ID (5 Digits)</label>
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">QR Code ID (5 Digits)</label>
                   <input 
                       required 
                       type="number"
-                      className="w-full p-2 border rounded font-mono bg-slate-50 text-slate-800" 
+                      className="w-full p-2 border rounded font-mono bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
                       value={formData.barcode} 
                       onChange={e => setFormData({ ...formData, barcode: e.target.value.slice(0, 5) })} // Keep max 5 digits
                       placeholder="e.g. 10001 (Must be unique)"
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                       This 5-digit code is the key for the scanner. It is encoded directly in the QR code.
                   </p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium text-slate-700">Rate (€)</label><input required type="number" className="w-full p-2 border rounded bg-slate-50 text-slate-800" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
-                <div><label className="text-sm font-medium text-slate-700">Status</label><select className="w-full p-2 border rounded bg-slate-50 text-slate-800" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div>
+                <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Rate (€)</label><input required type="number" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
+                <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</label><select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">Cancel</button>
+                <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 rounded">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700">Save</button>
               </div>
             </form>
@@ -1387,21 +1413,21 @@ function EmployeesTab({ employees, attendance, user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {filtered.map(emp => (
-          <div key={emp.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center group hover:border-cyan-300 transition-colors">
+          <div key={emp.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center group hover:border-cyan-300 transition-colors">
             <div>
-              <h4 className="font-bold text-lg text-slate-800">{emp.name}</h4>
-              <p className="text-sm text-slate-500">ID: {emp.barcode}</p>
-              <p className="text-sm text-slate-500">Bal: {formatCurrency(emp.balance || 0)}</p>
+              <h4 className="font-bold text-lg text-slate-800 dark:text-white">{emp.name}</h4>
+              <p className="text-sm text-slate-500 dark:text-slate-400">ID: {emp.barcode}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Bal: {formatCurrency(emp.balance || 0)}</p>
             </div>
             <div className="flex gap-2">
               {emp.barcode && (
-                 <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg" title="Generate QR Code">
+                 <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg dark:bg-green-900/30 dark:text-green-400" title="Generate QR Code">
                     <QrCode size={16} />
                  </button>
               )}
-              <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Sparkles size={16} /></button>
-              <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg text-slate-500"><Edit size={16} /></button>
-              <button onClick={() => { if(window.confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg"><Trash2 size={16} /></button>
+              <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg dark:bg-indigo-900/30 dark:text-indigo-400"><Sparkles size={16} /></button>
+              <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg text-slate-500 dark:bg-slate-700 dark:text-slate-400"><Edit size={16} /></button>
+              <button onClick={() => { if(window.confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg dark:bg-slate-700 dark:text-red-400"><Trash2 size={16} /></button>
             </div>
           </div>
         ))}
@@ -1413,20 +1439,20 @@ function EmployeesTab({ employees, attendance, user }) {
 // --- Attendance Logs ---
 function AttendanceTab({ attendance }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-200 bg-slate-50"><h3 className="font-semibold text-slate-800">Attendance Log</h3></div>
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50"><h3 className="font-semibold text-slate-800 dark:text-white">Attendance Log</h3></div>
       <div className="overflow-x-auto max-h-[600px]">
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500 font-medium text-xs sticky top-0">
+          <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs sticky top-0">
             <tr><th className="px-6 py-3">Time</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Action</th><th className="px-6 py-3">Hrs</th></tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
             {attendance.map(log => (
-              <tr key={log.id} className="hover:bg-slate-50">
-                <td className="px-6 py-3 text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
-                <td className="px-6 py-3 font-medium text-slate-800">{log.employeeName}</td>
-                <td className="px-6 py-3"><span className={`px-2 py-0.5 rounded text-xs font-bold ${log.action === 'IN' ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}`}>{log.action}</span></td>
-                <td className="px-6 py-3 text-slate-600">{log.calculatedHours ? Number(log.calculatedHours).toFixed(2) : '-'}</td>
+              <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                <td className="px-6 py-3 text-slate-500 dark:text-slate-400">{new Date(log.timestamp).toLocaleString()}</td>
+                <td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{log.employeeName}</td>
+                <td className="px-6 py-3"><span className={`px-2 py-0.5 rounded text-xs font-bold ${log.action === 'IN' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>{log.action}</span></td>
+                <td className="px-6 py-3 text-slate-600 dark:text-slate-300">{log.calculatedHours ? Number(log.calculatedHours).toFixed(2) : '-'}</td>
               </tr>
             ))}
           </tbody>
@@ -1472,11 +1498,11 @@ function PayrollTab({ employees, user }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-         <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <h3 className="font-bold mb-4 text-slate-800">Balances Due</h3>
+         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700">
+            <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Balances Due</h3>
             {employees.filter(e => (e.balance || 0) > 0).map(emp => (
-                <div key={emp.id} className="flex justify-between items-center p-3 border-b border-slate-50">
-                  <span className="text-slate-800">{emp.name}</span>
+                <div key={emp.id} className="flex justify-between items-center p-3 border-b border-slate-50 dark:border-slate-700">
+                  <span className="text-slate-800 dark:text-slate-200">{emp.name}</span>
                   <div className="flex items-center gap-4">
                     <span className="text-red-600 font-bold">{formatCurrency(emp.balance)}</span>
                     <button onClick={() => { setSelectedEmp(emp); setPayForm({...payForm, amount: emp.balance}); setIsPaying(true); }} className="text-xs text-white bg-indigo-600 px-3 py-1 rounded hover:bg-indigo-700">Pay</button>
@@ -1484,11 +1510,11 @@ function PayrollTab({ employees, user }) {
                 </div>
             ))}
          </div>
-         <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <h3 className="font-bold mb-4 text-slate-800">Recent Payments</h3>
+         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700">
+            <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Recent Payments</h3>
             {payments.map(pay => (
-                <div key={pay.id} className="flex justify-between p-2 text-sm border-b border-slate-50">
-                   <span className="text-slate-600">{pay.employeeName}</span>
+                <div key={pay.id} className="flex justify-between p-2 text-sm border-b border-slate-50 dark:border-slate-700">
+                   <span className="text-slate-600 dark:text-slate-300">{pay.employeeName}</span>
                    <span className="text-green-600 font-bold">{formatCurrency(pay.amount)}</span>
                 </div>
             ))}
@@ -1496,12 +1522,12 @@ function PayrollTab({ employees, user }) {
       </div>
       {isPaying && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-xl w-full max-w-sm">
-             <h3 className="font-bold mb-4 text-slate-800">Pay {selectedEmp.name}</h3>
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-sm">
+             <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Pay {selectedEmp.name}</h3>
              <form onSubmit={handlePayment} className="space-y-4">
-               <input type="number" className="w-full p-2 border rounded bg-slate-50 text-slate-800" value={payForm.amount} onChange={e=>setPayForm({...payForm, amount: e.target.value})} />
-               <input type="text" placeholder="Notes" className="w-full p-2 border rounded bg-slate-50 text-slate-800" value={payForm.note} onChange={e=>setPayForm({...payForm, note: e.target.value})} />
-               <div className="flex justify-end gap-2"><button type="button" onClick={()=>setIsPaying(false)} className="px-3 py-2 text-slate-500">Cancel</button><button type="submit" className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700">Pay</button></div>
+               <input type="number" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={payForm.amount} onChange={e=>setPayForm({...payForm, amount: e.target.value})} />
+               <input type="text" placeholder="Notes" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={payForm.note} onChange={e=>setPayForm({...payForm, note: e.target.value})} />
+               <div className="flex justify-end gap-2"><button type="button" onClick={()=>setIsPaying(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button><button type="submit" className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700">Pay</button></div>
              </form>
           </div>
         </div>
@@ -1546,22 +1572,22 @@ function AbsencesTab({ employees, user }) {
   return (
     <div className="space-y-6">
       <GeminiModal isOpen={!!geminiResult || geminiLoading} onClose={() => { setGeminiResult(null); setGeminiLoading(false); }} title={geminiResult?.title} content={geminiResult?.content} isLoading={geminiLoading} />
-      <div className="flex justify-between"><h2 className="font-bold text-slate-800">Leave Management</h2><button onClick={()=>setShowModal(true)} className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700">+ Record</button></div>
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="flex justify-between"><h2 className="font-bold text-slate-800 dark:text-white">Leave Management</h2><button onClick={()=>setShowModal(true)} className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700">+ Record</button></div>
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden">
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500 font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Action</th></tr></thead>
-          <tbody className="divide-y divide-slate-100">{absences.map(ab => (<tr key={ab.id} className="hover:bg-slate-50"><td className="px-6 py-3 text-slate-500">{ab.date}</td><td className="px-6 py-3 font-medium text-slate-800">{ab.employeeName}</td><td className="px-6 py-3 text-slate-600">{ab.type}</td><td className="px-6 py-3"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 flex items-center gap-1"><Sparkles size={12}/> Email</button></td></tr>))}</tbody>
+          <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Action</th></tr></thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700">{absences.map(ab => (<tr key={ab.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="px-6 py-3 text-slate-500 dark:text-slate-400">{ab.date}</td><td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{ab.employeeName}</td><td className="px-6 py-3 text-slate-600 dark:text-slate-300">{ab.type}</td><td className="px-6 py-3"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> Email</button></td></tr>))}</tbody>
         </table>
       </div>
       {showModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-xl w-full max-w-md">
-            <h3 className="font-bold mb-4 text-slate-800">Record Absence</h3>
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-md">
+            <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Record Absence</h3>
             <form onSubmit={handleAddAbsence} className="space-y-4">
-              <select required className="w-full p-2 border rounded bg-slate-50 text-slate-800" value={form.employeeId} onChange={e=>setForm({...form, employeeId: e.target.value})}><option value="">Select Employee...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
-              <input required type="date" className="w-full p-2 border rounded bg-slate-50 text-slate-800" value={form.date} onChange={e=>setForm({...form, date: e.target.value})} />
-              <select className="w-full p-2 border rounded bg-slate-50 text-slate-800" value={form.type} onChange={e=>setForm({...form, type: e.target.value})}><option>Sick</option><option>Vacation</option><option>Personal</option></select>
-              <div className="flex justify-end gap-3"><button type="button" onClick={()=>setShowModal(false)} className="px-3 py-2 text-slate-500">Cancel</button><button type="submit" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">Save</button></div>
+              <select required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.employeeId} onChange={e=>setForm({...form, employeeId: e.target.value})}><option value="">Select Employee...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
+              <input required type="date" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.date} onChange={e=>setForm({...form, date: e.target.value})} />
+              <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.type} onChange={e=>setForm({...form, type: e.target.value})}><option>Sick</option><option>Vacation</option><option>Personal</option></select>
+              <div className="flex justify-end gap-3"><button type="button" onClick={()=>setShowModal(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button><button type="submit" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">Save</button></div>
             </form>
           </div>
         </div>
