@@ -603,8 +603,14 @@ function ScannerMode({ user }) {
     const scannedCode = code.trim();
     setCode('');
     
-    // Scan logic looks for the 'barcode' field (which is now the unique ID)
-    const employee = employees.find(emp => emp.barcode === scannedCode && emp.status === 'Active');
+    // FIX: Scanner reads 12 digits (EAN-13 minus first digit).
+    // The employee ID is 5 digits, stored as '10001', '10002', etc.
+    // The scanner output will be 12 digits, ending with the 5-digit employee ID.
+    // We match the last 5 digits of the scanned input against the stored employee barcode.
+    const scannedIDSegment = scannedCode.slice(-5);
+    
+    // Find employee using the 5-digit segment
+    const employee = employees.find(emp => emp.barcode === scannedIDSegment && emp.status === 'Active');
     
     if (!employee) {
       showFeedback('error', 'Employee not found or inactive.');
