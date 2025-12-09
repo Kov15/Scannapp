@@ -311,7 +311,7 @@ function BarcodeDisplayModal({ employee, onClose }) {
 
                     <div className="bg-cyan-50 dark:bg-cyan-900/50 p-4 rounded-lg border border-cyan-200 dark:border-cyan-700">
                         <h4 className="font-semibold text-cyan-800 dark:text-cyan-300 flex items-center gap-2">
-                            <Download size={16} /> Direct Link to Image
+                            <Download size={16} /> Generated Code Link
                         </h4>
                         <p className="text-sm text-cyan-700 dark:text-cyan-400 mt-2">
                             Use this direct link to share the high-resolution image with employees:
@@ -348,6 +348,7 @@ export default function AquaTimeControl() {
   // 1. Firebase Auth (Background Connection)
   useEffect(() => {
     const initAuth = async () => {
+      // NOTE: Using a single promise chain to handle custom token auth and graceful fallback
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
@@ -356,8 +357,10 @@ export default function AquaTimeControl() {
         }
       } catch (error) {
         // Log the error but proceed with anonymous fallback
-        console.error("Auth failed, falling back to anonymous:", error);
-        await signInAnonymously(auth);
+        if (!auth.currentUser) {
+           console.error("Auth failed, falling back to anonymous:", error);
+           await signInAnonymously(auth);
+        }
       }
     };
     initAuth();
@@ -605,8 +608,8 @@ function ScannerMode({ user }) {
     
     // FIX: Scanner reads 12 digits (EAN-13 minus first digit).
     // The employee ID is 5 digits, stored as '10001', '10002', etc.
-    // The scanner output will be 12 digits, ending with the 5-digit employee ID.
-    // We match the last 5 digits of the scanned input against the stored employee barcode.
+    // The scanner output will be 12 digits, so we extract the last 5 digits
+    // from the scanned input to match the stored employee barcode ID.
     const scannedIDSegment = scannedCode.slice(-5);
     
     // Find employee using the 5-digit segment
@@ -630,13 +633,6 @@ function ScannerMode({ user }) {
       const timestamp = new Date().toISOString();
       let hoursWorked = 0;
       let earnedAmount = 0;
-
-      if (!isCheckIn && employee.lastCheckInTime) {
-        const checkInTime = new Date(employee.lastCheckInTime).getTime();
-        const durationMs = now - checkInTime;
-        hoursWorked = durationMs / (1000 * 60 * 60); 
-        earnedAmount = hoursWorked * (parseFloat(employee.hourlyRate) || 0);
-      }
 
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
         employeeId: employee.id,
@@ -1387,20 +1383,19 @@ function EmployeesTab({ employees, attendance, user }) {
               
               {/* Barcode ID input, now editable */}
               <div>
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Barcode ID</label>
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Barcode ID (5 Digits)</label>
                   <input 
                       required 
+                      type="number"
                       className="w-full p-2 border rounded font-mono disabled:bg-slate-100 disabled:cursor-not-allowed dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
                       value={formData.barcode} 
-                      onChange={e => setFormData({ ...formData, barcode: e.target.value })} 
+                      onChange={e => setFormData({ ...formData, barcode: e.target.value.slice(0, 5) })} // Keep max 5 digits
                       placeholder="e.g. 10001 (Must be unique)"
-                      disabled={!formData.id && (formData.barcode === '' || formData.barcode === 0)}
                   />
-                  {!formData.id && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          *ID is automatically generated upon saving.
-                      </p>
-                  )}
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      This 5-digit code is used by the scanner (it will be padded to 13 digits for EAN-13 image generation).
+                      If creating new, leave blank for auto-generation.
+                  </p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
