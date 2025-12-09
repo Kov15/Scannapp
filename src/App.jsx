@@ -129,7 +129,7 @@ const SimpleBarChart = ({ data, labels, color = "#0891b2" }) => {
     <div className="flex items-end justify-between h-40 gap-2 w-full">
       {data.map((val, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
-          <div className="relative w-full bg-slate-100 dark:bg-slate-700 rounded-t-md overflow-hidden flex items-end h-full">
+          <div className="relative w-full bg-[var(--card-bg-light)] rounded-t-md overflow-hidden flex items-end h-full">
              <div 
                className="w-full transition-all duration-700 ease-out relative group-hover:opacity-90"
                style={{ height: `${(val / max) * 100}%`, backgroundColor: color }}
@@ -139,7 +139,7 @@ const SimpleBarChart = ({ data, labels, color = "#0891b2" }) => {
                {val.toFixed(1)} hrs
              </div>
           </div>
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider truncate w-full text-center">{labels[i]}</span>
+          <span className="text-[10px] text-[var(--text-secondary)] font-medium uppercase tracking-wider truncate w-full text-center">{labels[i]}</span>
         </div>
       ))}
     </div>
@@ -196,7 +196,7 @@ const BarcodeVisualization = ({ code }) => {
     const url = getBarcodeUrl(code);
 
     return (
-        <div className="flex flex-col items-center p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 w-full max-w-sm">
+        <div className="flex flex-col items-center p-4 bg-[var(--background-card)] rounded-lg border border-[var(--border-color)] w-full max-w-sm">
             <img 
                 src={url} 
                 alt={`EAN-13 Barcode for ID ${code}`}
@@ -208,7 +208,7 @@ const BarcodeVisualization = ({ code }) => {
                     e.target.src = `https://placehold.co/300x100/f87171/ffffff?text=API+BARCODE+FAILED`;
                 }}
             />
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-3 font-mono">Original ID: <span className="font-bold text-cyan-700">{code}</span></p>
+            <p className="text-sm text-[var(--text-secondary)] mt-3 font-mono">Original ID: <span className="font-bold text-cyan-700">{code}</span></p>
         </div>
     );
 };
@@ -244,7 +244,7 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className="bg-[var(--background-card)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-4 flex justify-between items-center text-white">
           <div className="flex items-center gap-2">
             <Sparkles size={20} className="text-yellow-300" />
@@ -263,7 +263,7 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
             </div>
           ) : (
             <div className="prose prose-indigo max-w-none">
-              <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-xl border border-slate-100 dark:border-slate-600 text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed text-sm max-h-[60vh] overflow-y-auto">
+              <div className="bg-slate-50 bg-[var(--background-light)] p-4 rounded-xl border border-slate-100 border-[var(--border-color)] text-[var(--text-primary)] whitespace-pre-wrap leading-relaxed text-sm max-h-[60vh] overflow-y-auto">
                 {content}
               </div>
               <div className="mt-4 flex justify-end gap-2">
@@ -290,18 +290,18 @@ function BarcodeDisplayModal({ employee, onClose }) {
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-[var(--background-card)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="p-6">
                     <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <h3 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
                             <Barcode size={24} className="text-cyan-600"/> Employee Code: {employee.name}
                         </h3>
-                        <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                            <X size={20} className="text-slate-500 dark:text-slate-400" />
+                        <button onClick={onClose} className="p-1 rounded-full hover:bg-[var(--background-light)] transition-colors">
+                            <X size={20} className="text-[var(--text-secondary)]" />
                         </button>
                     </div>
 
-                    <p className="text-slate-600 dark:text-slate-400 mb-6">
+                    <p className="text-[var(--text-secondary)] mb-6">
                         This barcode image uses the **EAN-13** standard (13 digits), generated dynamically via **barcodeapi.org**.
                     </p>
 
@@ -309,14 +309,14 @@ function BarcodeDisplayModal({ employee, onClose }) {
                         <BarcodeVisualization code={employee.barcode} />
                     </div>
 
-                    <div className="bg-cyan-50 dark:bg-cyan-900/50 p-4 rounded-lg border border-cyan-200 dark:border-cyan-700">
-                        <h4 className="font-semibold text-cyan-800 dark:text-cyan-300 flex items-center gap-2">
+                    <div className="bg-cyan-50 bg-[var(--cyan-bg)] p-4 rounded-lg border border-cyan-200 border-[var(--cyan-border)]">
+                        <h4 className="font-semibold text-cyan-800 text-[var(--cyan-text)] flex items-center gap-2">
                             <Download size={16} /> Generated Code Link
                         </h4>
-                        <p className="text-sm text-cyan-700 dark:text-cyan-400 mt-2">
+                        <p className="text-sm text-[var(--cyan-text)] mt-2">
                             Use this direct link to share the high-resolution image with employees:
                         </p>
-                        <p className="text-sm text-cyan-700 dark:text-cyan-400 mt-2 font-mono break-all text-xs">
+                        <p className="text-sm text-[var(--cyan-text)] font-mono break-all text-xs mt-2">
                            <a href={barcodeUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-900">
                               {barcodeUrl}
                            </a>
@@ -397,12 +397,13 @@ export default function AquaTimeControl() {
 
   // 3. Dark Mode Toggle Effect
   useEffect(() => {
+    // Apply theme class to root element
     const root = document.documentElement;
     if (isDarkMode) {
-      root.classList.add('dark');
+      root.classList.add('dark-mode-active');
       localStorage.setItem('aqua_dark_mode', 'true');
     } else {
-      root.classList.remove('dark');
+      root.classList.remove('dark-mode-active');
       localStorage.setItem('aqua_dark_mode', 'false');
     }
   }, [isDarkMode]);
@@ -608,8 +609,7 @@ function ScannerMode({ user }) {
     
     // FIX: Scanner reads 12 digits (EAN-13 minus first digit).
     // The employee ID is 5 digits, stored as '10001', '10002', etc.
-    // The scanner output will be 12 digits, so we extract the last 5 digits
-    // from the scanned input to match the stored employee barcode ID.
+    // We extract the last 5 digits of the scanned input.
     const scannedIDSegment = scannedCode.slice(-5);
     
     // Find employee using the 5-digit segment
@@ -784,12 +784,12 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
   );
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-900 overflow-hidden">
+    <div className="flex h-screen bg-[var(--background-main)] overflow-hidden">
       {/* Sidebar */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transition-all duration-300 flex flex-col z-20`}>
+      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-[var(--background-card)] border-r border-[var(--border-color)] transition-all duration-300 flex flex-col z-20`}>
         <div className="p-6 flex items-center justify-between">
-           {isSidebarOpen && <span className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">AQUA<span className="text-cyan-500">.Control</span></span>}
-           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500">
+           {isSidebarOpen && <span className="text-xl font-bold text-[var(--text-primary)] tracking-tight">AQUA<span className="text-cyan-500">.Control</span></span>}
+           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-1 rounded hover:bg-[var(--background-light)] text-[var(--text-secondary)]">
              {isSidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
            </button>
         </div>
@@ -803,25 +803,25 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
           <MenuItem id="absences" icon={CalendarOff} label={isSidebarOpen ? "Absences" : ""} />
         </nav>
 
-        <div className="p-4 border-t border-slate-100 dark:border-slate-700">
+        <div className="p-4 border-t border-[var(--border-color)]">
           
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className="flex items-center space-x-3 px-4 py-3 w-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 rounded-lg transition-colors mb-2"
+            className="flex items-center space-x-3 px-4 py-3 w-full text-[var(--text-secondary)] hover:bg-[var(--background-light)] rounded-lg transition-colors mb-2"
           >
-            {isDarkMode ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} />}
+            {isDarkMode ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-slate-500" />}
             {isSidebarOpen && <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>}
           </button>
 
-          <div className={`flex items-center gap-3 px-4 py-3 mb-2 bg-slate-50 dark:bg-slate-700 rounded-lg ${!isSidebarOpen && 'hidden'}`}>
+          <div className={`flex items-center gap-3 px-4 py-3 mb-2 bg-[var(--background-light)] rounded-lg ${!isSidebarOpen && 'hidden'}`}>
              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-             <div className="text-xs text-slate-500 dark:text-slate-400">
-                <p className="font-semibold text-slate-700 dark:text-slate-200">Admin Logged In</p>
+             <div className="text-xs text-[var(--text-secondary)]">
+                <p className="font-semibold text-[var(--text-primary)]">Admin Logged In</p>
                 <p>Session Active</p>
              </div>
           </div>
           
-          <button onClick={handleLogout} className="flex items-center space-x-3 px-4 py-3 w-full text-red-500 hover:bg-red-50 dark:hover:bg-red-900/50 dark:text-red-400 rounded-lg transition-colors">
+          <button onClick={handleLogout} className="flex items-center space-x-3 px-4 py-3 w-full text-red-500 hover:bg-red-50/20 rounded-lg transition-colors">
             <LogOut size={20} />
             {isSidebarOpen && <span>Logout</span>}
           </button>
@@ -831,8 +831,8 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-8">
         <header className="flex justify-between items-center mb-8">
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">{activeTab}</h1>
-            <div className="text-sm text-slate-500 dark:text-slate-400">
+            <h1 className="text-2xl font-bold text-[var(--text-primary)] capitalize">{activeTab}</h1>
+            <div className="text-sm text-[var(--text-secondary)]">
                 Welcome, Master Admin
             </div>
         </header>
@@ -1041,16 +1041,16 @@ function AnalyticsTab({ employees, attendance }) {
   return (
     <div className="space-y-6">
       {/* Control Bar */}
-      <div className="flex flex-col xl:flex-row justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm gap-4">
+      <div className="flex flex-col xl:flex-row justify-between items-center bg-[var(--background-card)] p-4 rounded-xl border border-[var(--border-color)] shadow-sm gap-4">
          
          <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
              {/* Employee Selector */}
              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Users size={16} className="text-slate-400 dark:text-slate-500" />
+                <Users size={16} className="text-[var(--text-secondary)]" />
                 <select 
                     value={selectedEmployeeId} 
                     onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                    className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-48 font-medium"
+                    className="bg-[var(--background-light)] border border-[var(--border-color)] text-[var(--text-primary)] text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-48 font-medium"
                 >
                     <option value="all">All Employees</option>
                     {employees.map(emp => (
@@ -1060,14 +1060,14 @@ function AnalyticsTab({ employees, attendance }) {
              </div>
 
              {/* Range Selector */}
-             <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg w-full sm:w-auto">
+             <div className="flex bg-[var(--background-light)] p-1 rounded-lg w-full sm:w-auto">
                 {['Week', 'Month', 'Year'].map(r => (
                   <button 
                     key={r}
                     onClick={() => { setRange(r); setCurrentDate(new Date()); }}
                     className={`flex-1 sm:flex-none px-3 py-1 text-sm rounded-md transition-all ${range === r 
-                      ? 'bg-white shadow text-cyan-600 dark:bg-slate-600 dark:text-white' 
-                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'
+                      ? 'bg-[var(--background-card)] shadow text-cyan-600' 
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-main)]'
                     }`}
                   >
                     {r}
@@ -1077,19 +1077,19 @@ function AnalyticsTab({ employees, attendance }) {
          </div>
 
          {/* Time Travel Controls */}
-         <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600">
-             <button onClick={() => navigateDate(-1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors">
+         <div className="flex items-center gap-4 bg-[var(--background-light)] px-4 py-2 rounded-lg border border-[var(--border-color)]">
+             <button onClick={() => navigateDate(-1)} className="p-1 hover:bg-[var(--background-main)] rounded-full text-[var(--text-secondary)] transition-colors">
                  <ChevronLeft size={20} />
              </button>
-             <span className="font-bold text-slate-700 dark:text-white w-40 text-center text-sm">{metrics.displayTitle}</span>
-             <button onClick={() => navigateDate(1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors">
+             <span className="font-bold text-[var(--text-primary)] w-40 text-center text-sm">{metrics.displayTitle}</span>
+             <button onClick={() => navigateDate(1)} className="p-1 hover:bg-[var(--background-main)] rounded-full text-[var(--text-secondary)] transition-colors">
                  <ChevronRight size={20} />
              </button>
          </div>
 
          <button 
             onClick={handleExportCSV}
-            className="flex items-center gap-2 text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400 px-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 w-full xl:w-auto justify-center"
+            className="flex items-center gap-2 text-[var(--text-secondary)] hover:text-cyan-600 px-4 py-2 border border-[var(--border-color)] rounded-lg text-sm bg-[var(--background-card)] w-full xl:w-auto justify-center"
          >
             <Download size={16} /> Export CSV
          </button>
@@ -1103,25 +1103,25 @@ function AnalyticsTab({ employees, attendance }) {
            { label: 'Avg Shift', val: metrics.avgShift.toFixed(1) + 'h', icon: BarChart3, color: 'text-purple-600', bg: 'bg-purple-50', sub: 'Per employee' },
            { label: 'Efficiency Score', val: metrics.performanceScore + '%', icon: TrendingUp, color: 'text-orange-600', bg: 'bg-orange-50', sub: 'Based on 8h target' },
         ].map((k, i) => (
-          <div key={i} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between hover:border-cyan-200 transition-colors">
+          <div key={i} className="bg-[var(--background-card)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm flex flex-col justify-between hover:border-cyan-200 transition-colors">
              <div className="flex justify-between items-start mb-2">
                 <div>
-                   <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{k.label}</p>
+                   <p className="text-[var(--text-secondary)] text-sm font-medium">{k.label}</p>
                    <h3 className={`text-2xl font-bold ${k.color} mt-1`}>{k.val}</h3>
                 </div>
                 <div className={`p-2 rounded-lg ${k.bg} ${k.color}`}><k.icon size={20} /></div>
              </div>
-             <p className="text-xs text-slate-400">{k.sub}</p>
+             <p className="text-xs text-[var(--text-secondary)]">{k.sub}</p>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="lg:col-span-2 bg-[var(--background-card)] p-6 rounded-xl border border-[var(--border-color)] shadow-sm">
            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-bold text-slate-800 dark:text-white">Hours Distribution ({range})</h3>
-              <div className="flex gap-2 text-xs text-slate-500">
+              <h3 className="font-bold text-[var(--text-primary)]">Hours Distribution ({range})</h3>
+              <div className="flex gap-2 text-xs text-[var(--text-secondary)]">
                  <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-cyan-600"></div> Regular</span>
               </div>
            </div>
@@ -1129,40 +1129,40 @@ function AnalyticsTab({ employees, attendance }) {
         </div>
 
         {/* Breakdown Panel */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-           <h3 className="font-bold text-slate-800 dark:text-white mb-4">Shift Types</h3>
+        <div className="bg-[var(--background-card)] p-6 rounded-xl border border-[var(--border-color)] shadow-sm">
+           <h3 className="font-bold text-[var(--text-primary)] mb-4">Shift Types</h3>
            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-[var(--background-light)] rounded-lg">
                  <div className="flex items-center gap-3">
                     <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Clock size={16} /></div>
                     <div>
-                       <p className="font-medium text-sm text-slate-700 dark:text-white">Regular Shifts</p>
-                       <p className="text-xs text-slate-500 dark:text-slate-400">{metrics.shiftCount} shifts recorded</p>
+                       <p className="font-medium text-sm text-[var(--text-primary)]">Regular Shifts</p>
+                       <p className="text-xs text-[var(--text-secondary)]">{metrics.shiftCount} shifts recorded</p>
                     </div>
                  </div>
-                 <span className="font-bold text-slate-700 dark:text-white">{metrics.totalHours.toFixed(0)}h</span>
+                 <span className="font-bold text-[var(--text-primary)]">{metrics.totalHours.toFixed(0)}h</span>
               </div>
-              <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-orange-50 bg-[var(--orange-bg)] rounded-lg">
                  <div className="flex items-center gap-3">
                     <div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><AlertTriangle size={16} /></div>
                     <div>
-                       <p className="font-medium text-sm text-slate-700 dark:text-white">Overtime</p>
-                       <p className="text-xs text-slate-500 dark:text-slate-400">Shifts &gt; 8h</p>
+                       <p className="font-medium text-sm text-[var(--text-primary)]">Overtime</p>
+                       <p className="text-xs text-[var(--text-secondary)]">Shifts &gt; 8h</p>
                     </div>
                  </div>
                  {/* Mock calculation for demo visuals */}
-                 <span className="font-bold text-orange-700 dark:text-orange-400">{(metrics.totalHours * 0.15).toFixed(0)}h</span>
+                 <span className="font-bold text-orange-700 text-[var(--orange-text)]">{(metrics.totalHours * 0.15).toFixed(0)}h</span>
               </div>
               
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-                 <h4 className="text-sm font-medium mb-3 text-slate-700 dark:text-white">Top Performers (Hours)</h4>
+              <div className="pt-4 border-t border-[var(--border-color)]">
+                 <h4 className="text-sm font-medium mb-3 text-[var(--text-primary)]">Top Performers (Hours)</h4>
                  {employees
                     .sort((a,b) => (b.totalHours||0) - (a.totalHours||0))
                     .slice(0,3)
                     .map(e => (
                        <div key={e.id} className="flex justify-between items-center text-sm py-1">
-                          <span className="text-slate-600 dark:text-slate-300">{e.name}</span>
-                          <span className="font-mono font-medium text-cyan-600 dark:text-cyan-400">{e.totalHours?.toFixed(1) || 0}h</span>
+                          <span className="text-[var(--text-primary)]">{e.name}</span>
+                          <span className="font-mono font-medium text-cyan-600">{e.totalHours?.toFixed(1) || 0}h</span>
                        </div>
                     ))}
               </div>
@@ -1213,20 +1213,20 @@ function OverviewTab({ employees, attendance, user }) {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Currently On-Site</p>
+        <div className="bg-[var(--background-card)] p-6 rounded-xl shadow-sm border border-[var(--border-color)]">
+          <p className="text-[var(--text-secondary)] text-sm mb-1">Currently On-Site</p>
           <p className="text-3xl font-bold text-cyan-600">{activeEmployees.length}</p>
         </div>
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Total Employees</p>
-          <p className="text-3xl font-bold text-slate-800 dark:text-white">{totalEmployees}</p>
+        <div className="bg-[var(--background-card)] p-6 rounded-xl shadow-sm border border-[var(--border-color)]">
+          <p className="text-[var(--text-secondary)] text-sm mb-1">Total Employees</p>
+          <p className="text-3xl font-bold text-[var(--text-primary)]">{totalEmployees}</p>
         </div>
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">Scans Today</p>
+        <div className="bg-[var(--background-card)] p-6 rounded-xl shadow-sm border border-[var(--border-color)]">
+          <p className="text-[var(--text-secondary)] text-sm mb-1">Scans Today</p>
           <p className="text-3xl font-bold text-indigo-600">{todayScans.length}</p>
         </div>
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-1">System Status</p>
+        <div className="bg-[var(--background-card)] p-6 rounded-xl shadow-sm border border-[var(--border-color)]">
+          <p className="text-[var(--text-secondary)] text-sm mb-1">System Status</p>
           <div className="flex items-center mt-1 text-green-600 font-medium">
              <CheckCircle2 size={20} className="mr-2" /> Operational
           </div>
@@ -1234,13 +1234,13 @@ function OverviewTab({ employees, attendance, user }) {
       </div>
 
       {/* Active Employees Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/50">
-          <h3 className="font-semibold text-slate-800 dark:text-white">Currently Checked In</h3>
+      <div className="bg-[var(--background-card)] rounded-xl shadow-sm border border-[var(--border-color)] overflow-hidden">
+        <div className="px-6 py-4 border-b border-[var(--border-color)] bg-[var(--background-light)]">
+          <h3 className="font-semibold text-[var(--text-primary)]">Currently Checked In</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-medium text-xs">
+            <thead className="bg-[var(--background-light)] text-[var(--text-secondary)] uppercase tracking-wider font-medium text-xs">
               <tr>
                 <th className="px-6 py-3">Employee</th>
                 <th className="px-6 py-3">Checked In At</th>
@@ -1248,18 +1248,18 @@ function OverviewTab({ employees, attendance, user }) {
                 <th className="px-6 py-3">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+            <tbody className="divide-y divide-[var(--border-color)]">
               {activeEmployees.length === 0 ? (
-                <tr><td colSpan="4" className="px-6 py-8 text-center text-slate-400 dark:text-slate-500">No one is currently active</td></tr>
+                <tr><td colSpan="4" className="px-6 py-8 text-center text-[var(--text-secondary)]">No one is currently active</td></tr>
               ) : activeEmployees.map(emp => {
                 const duration = emp.lastCheckInTime ? calculateHours(Date.now() - new Date(emp.lastCheckInTime).getTime()) : 0;
                 return (
-                  <tr key={emp.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                    <td className="px-6 py-4 font-medium text-slate-800 dark:text-white">{emp.name}</td>
-                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{new Date(emp.lastCheckInTime).toLocaleTimeString()}</td>
-                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{duration} hrs</td>
+                  <tr key={emp.id} className="hover:bg-[var(--background-light)]/50">
+                    <td className="px-6 py-4 font-medium text-[var(--text-primary)]">{emp.name}</td>
+                    <td className="px-6 py-4 text-[var(--text-secondary)]">{new Date(emp.lastCheckInTime).toLocaleTimeString()}</td>
+                    <td className="px-6 py-4 text-[var(--text-secondary)]">{duration} hrs</td>
                     <td className="px-6 py-4">
-                       <button onClick={() => handleQuickCheckout(emp)} className="text-xs bg-red-50 text-red-600 px-3 py-1 rounded-full hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 font-medium">Force Out</button>
+                       <button onClick={() => handleQuickCheckout(emp)} className="text-xs bg-red-50/20 text-red-600 px-3 py-1 rounded-full hover:bg-red-100/30 font-medium">Force Out</button>
                     </td>
                   </tr>
                 )
@@ -1357,13 +1357,13 @@ function EmployeesTab({ employees, attendance, user }) {
 
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="relative">
-            <Search className="absolute left-3 top-3 text-slate-400 dark:text-slate-500" size={18} />
+            <Search className="absolute left-3 top-3 text-[var(--text-secondary)]" size={18} />
             <input 
                type="text" 
                placeholder="Search by name or code..." 
                value={search}
                onChange={(e) => setSearch(e.target.value)}
-               className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg w-full sm:w-64 text-slate-800 dark:text-white"
+               className="pl-10 pr-4 py-2 bg-[var(--background-card)] border border-[var(--border-color)] rounded-lg w-full sm:w-64 text-[var(--text-primary)]"
             />
         </div>
         <button 
@@ -1376,34 +1376,34 @@ function EmployeesTab({ employees, attendance, user }) {
 
       {isEditing && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6">
-            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">{formData.id ? 'Edit' : 'New'} Employee</h3>
+          <div className="bg-[var(--background-card)] rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-xl font-bold mb-4 text-[var(--text-primary)]">{formData.id ? 'Edit' : 'New'} Employee</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Name</label><input required className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
+              <div><label className="text-sm font-medium text-[var(--text-primary)]">Name</label><input required className="w-full p-2 border rounded bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
               
               {/* Barcode ID input, now editable */}
               <div>
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Barcode ID (5 Digits)</label>
+                  <label className="text-sm font-medium text-[var(--text-primary)]">Barcode ID (5 Digits)</label>
                   <input 
                       required 
                       type="number"
-                      className="w-full p-2 border rounded font-mono disabled:bg-slate-100 disabled:cursor-not-allowed dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
+                      className="w-full p-2 border rounded font-mono disabled:bg-[var(--background-light)] disabled:cursor-not-allowed bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" 
                       value={formData.barcode} 
                       onChange={e => setFormData({ ...formData, barcode: e.target.value.slice(0, 5) })} // Keep max 5 digits
                       placeholder="e.g. 10001 (Must be unique)"
                   />
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  <p className="text-xs text-[var(--text-secondary)] mt-1">
                       This 5-digit code is used by the scanner (it will be padded to 13 digits for EAN-13 image generation).
                       If creating new, leave blank for auto-generation.
                   </p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Rate (€)</label><input required type="number" className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
-                <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</label><select className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div>
+                <div><label className="text-sm font-medium text-[var(--text-primary)]">Rate (€)</label><input required type="number" className="w-full p-2 border rounded bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div>
+                <div><label className="text-sm font-medium text-[var(--text-primary)]">Status</label><select className="w-full p-2 border rounded bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 rounded">Cancel</button>
+                <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-[var(--text-primary)] hover:bg-[var(--background-light)] rounded">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700">Save</button>
               </div>
             </form>
@@ -1413,21 +1413,21 @@ function EmployeesTab({ employees, attendance, user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {filtered.map(emp => (
-          <div key={emp.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center group hover:border-cyan-300 transition-colors">
+          <div key={emp.id} className="bg-[var(--background-card)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm flex justify-between items-center group hover:border-cyan-300 transition-colors">
             <div>
-              <h4 className="font-bold text-lg text-slate-800 dark:text-white">{emp.name}</h4>
-              <p className="text-sm text-slate-500 dark:text-slate-400">ID: {emp.barcode}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Bal: {formatCurrency(emp.balance || 0)}</p>
+              <h4 className="font-bold text-lg text-[var(--text-primary)]">{emp.name}</h4>
+              <p className="text-sm text-[var(--text-secondary)]">ID: {emp.barcode}</p>
+              <p className="text-sm text-[var(--text-secondary)]">Bal: {formatCurrency(emp.balance || 0)}</p>
             </div>
             <div className="flex gap-2">
               {emp.barcode && (
-                 <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg dark:bg-green-900/30 dark:text-green-400" title="Generate Barcode">
+                 <button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50/20 text-green-600 rounded-lg" title="Generate Barcode">
                     <Barcode size={16} />
                  </button>
               )}
-              <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg dark:bg-indigo-900/30 dark:text-indigo-400"><Sparkles size={16} /></button>
-              <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg dark:bg-slate-700 dark:text-slate-400"><Edit size={16} /></button>
-              <button onClick={() => { if(window.confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg dark:bg-slate-700 dark:text-red-400"><Trash2 size={16} /></button>
+              <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50/20 text-indigo-600 rounded-lg"><Sparkles size={16} /></button>
+              <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-[var(--background-light)] rounded-lg text-[var(--text-secondary)]"><Edit size={16} /></button>
+              <button onClick={() => { if(window.confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-[var(--background-light)] text-red-600 rounded-lg"><Trash2 size={16} /></button>
             </div>
           </div>
         ))}
@@ -1439,20 +1439,20 @@ function EmployeesTab({ employees, attendance, user }) {
 // --- Attendance Logs ---
 function AttendanceTab({ attendance }) {
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/50"><h3 className="font-semibold text-slate-800 dark:text-white">Attendance Log</h3></div>
+    <div className="bg-[var(--background-card)] rounded-xl shadow-sm border border-[var(--border-color)] overflow-hidden">
+      <div className="px-6 py-4 border-b border-[var(--border-color)] bg-[var(--background-light)]"><h3 className="font-semibold text-[var(--text-primary)]">Attendance Log</h3></div>
       <div className="overflow-x-auto max-h-[600px]">
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs sticky top-0">
+          <thead className="bg-[var(--background-light)] text-[var(--text-secondary)] font-medium text-xs sticky top-0">
             <tr><th className="px-6 py-3">Time</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Action</th><th className="px-6 py-3">Hrs</th></tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+          <tbody className="divide-y divide-[var(--border-color)]">
             {attendance.map(log => (
-              <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                <td className="px-6 py-3 text-slate-500 dark:text-slate-400">{new Date(log.timestamp).toLocaleString()}</td>
-                <td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{log.employeeName}</td>
-                <td className="px-6 py-3"><span className={`px-2 py-0.5 rounded text-xs font-bold ${log.action === 'IN' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>{log.action}</span></td>
-                <td className="px-6 py-3 text-slate-600 dark:text-slate-300">{log.calculatedHours ? Number(log.calculatedHours).toFixed(2) : '-'}</td>
+              <tr key={log.id} className="hover:bg-[var(--background-light)]/50">
+                <td className="px-6 py-3 text-[var(--text-secondary)]">{new Date(log.timestamp).toLocaleString()}</td>
+                <td className="px-6 py-3 font-medium text-[var(--text-primary)]">{log.employeeName}</td>
+                <td className="px-6 py-3"><span className={`px-2 py-0.5 rounded text-xs font-bold ${log.action === 'IN' ? 'bg-green-100/20 text-green-600' : 'bg-indigo-100/20 text-indigo-600'}`}>{log.action}</span></td>
+                <td className="px-6 py-3 text-[var(--text-primary)]">{log.calculatedHours ? Number(log.calculatedHours).toFixed(2) : '-'}</td>
               </tr>
             ))}
           </tbody>
@@ -1498,23 +1498,23 @@ function PayrollTab({ employees, user }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-100 dark:border-slate-700">
-            <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Balances Due</h3>
+         <div className="bg-[var(--background-card)] rounded-xl p-6 border border-[var(--border-color)]">
+            <h3 className="font-bold mb-4 text-[var(--text-primary)]">Balances Due</h3>
             {employees.filter(e => (e.balance || 0) > 0).map(emp => (
-                <div key={emp.id} className="flex justify-between items-center p-3 border-b border-slate-50 dark:border-slate-700">
-                  <span className="text-slate-800 dark:text-slate-200">{emp.name}</span>
+                <div key={emp.id} className="flex justify-between items-center p-3 border-b border-[var(--border-color)]">
+                  <span className="text-[var(--text-primary)]">{emp.name}</span>
                   <div className="flex items-center gap-4">
-                    <span className="text-red-600 dark:text-red-400 font-bold">{formatCurrency(emp.balance)}</span>
+                    <span className="text-red-600 font-bold">{formatCurrency(emp.balance)}</span>
                     <button onClick={() => { setSelectedEmp(emp); setPayForm({...payForm, amount: emp.balance}); setIsPaying(true); }} className="text-xs text-white bg-indigo-600 px-3 py-1 rounded hover:bg-indigo-700">Pay</button>
                   </div>
                 </div>
             ))}
          </div>
-         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-100 dark:border-slate-700">
-            <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Recent Payments</h3>
+         <div className="bg-[var(--background-card)] rounded-xl p-6 border border-[var(--border-color)]">
+            <h3 className="font-bold mb-4 text-[var(--text-primary)]">Recent Payments</h3>
             {payments.map(pay => (
-                <div key={pay.id} className="flex justify-between p-2 text-sm border-b border-slate-50 dark:border-slate-700">
-                   <span className="text-slate-600 dark:text-slate-300">{pay.employeeName}</span>
+                <div key={pay.id} className="flex justify-between p-2 text-sm border-b border-[var(--border-color)]">
+                   <span className="text-[var(--text-secondary)]">{pay.employeeName}</span>
                    <span className="text-green-600 font-bold">{formatCurrency(pay.amount)}</span>
                 </div>
             ))}
@@ -1522,12 +1522,12 @@ function PayrollTab({ employees, user }) {
       </div>
       {isPaying && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-sm">
-             <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Pay {selectedEmp.name}</h3>
+          <div className="bg-[var(--background-card)] p-6 rounded-xl w-full max-w-sm">
+             <h3 className="font-bold mb-4 text-[var(--text-primary)]">Pay {selectedEmp.name}</h3>
              <form onSubmit={handlePayment} className="space-y-4">
-               <input type="number" className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={payForm.amount} onChange={e=>setPayForm({...payForm, amount: e.target.value})} />
-               <input type="text" placeholder="Notes" className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={payForm.note} onChange={e=>setPayForm({...payForm, note: e.target.value})} />
-               <div className="flex justify-end gap-2"><button type="button" onClick={()=>setIsPaying(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button><button type="submit" className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700">Pay</button></div>
+               <input type="number" className="w-full p-2 border rounded bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" value={payForm.amount} onChange={e=>setPayForm({...payForm, amount: e.target.value})} />
+               <input type="text" placeholder="Notes" className="w-full p-2 border rounded bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" value={payForm.note} onChange={e=>setPayForm({...payForm, note: e.target.value})} />
+               <div className="flex justify-end gap-2"><button type="button" onClick={()=>setIsPaying(false)} className="px-3 py-2 text-[var(--text-secondary)]">Cancel</button><button type="submit" className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700">Pay</button></div>
              </form>
           </div>
         </div>
@@ -1572,22 +1572,22 @@ function AbsencesTab({ employees, user }) {
   return (
     <div className="space-y-6">
       <GeminiModal isOpen={!!geminiResult || geminiLoading} onClose={() => { setGeminiResult(null); setGeminiLoading(false); }} title={geminiResult?.title} content={geminiResult?.content} isLoading={geminiLoading} />
-      <div className="flex justify-between"><h2 className="font-bold text-slate-800 dark:text-white">Leave Management</h2><button onClick={()=>setShowModal(true)} className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700">+ Record</button></div>
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden">
+      <div className="flex justify-between"><h2 className="font-bold text-[var(--text-primary)]">Leave Management</h2><button onClick={()=>setShowModal(true)} className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700">+ Record</button></div>
+      <div className="bg-[var(--background-card)] rounded-xl shadow-sm overflow-hidden">
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Action</th></tr></thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-700">{absences.map(ab => (<tr key={ab.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="px-6 py-3 text-slate-500 dark:text-slate-400">{ab.date}</td><td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{ab.employeeName}</td><td className="px-6 py-3 text-slate-600 dark:text-slate-300">{ab.type}</td><td className="px-6 py-3"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> Email</button></td></tr>))}</tbody>
+          <thead className="bg-[var(--background-light)] text-[var(--text-secondary)] font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Action</th></tr></thead>
+          <tbody className="divide-y divide-[var(--border-color)]">{absences.map(ab => (<tr key={ab.id} className="hover:bg-[var(--background-light)]/50"><td className="px-6 py-3 text-[var(--text-secondary)]">{ab.date}</td><td className="px-6 py-3 font-medium text-[var(--text-primary)]">{ab.employeeName}</td><td className="px-6 py-3 text-[var(--text-primary)]">{ab.type}</td><td className="px-6 py-3"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 flex items-center gap-1"><Sparkles size={12}/> Email</button></td></tr>))}</tbody>
         </table>
       </div>
       {showModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-md">
-            <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Record Absence</h3>
+          <div className="bg-[var(--background-card)] p-6 rounded-xl w-full max-w-md">
+            <h3 className="font-bold mb-4 text-[var(--text-primary)]">Record Absence</h3>
             <form onSubmit={handleAddAbsence} className="space-y-4">
-              <select required className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.employeeId} onChange={e=>setForm({...form, employeeId: e.target.value})}><option value="">Select Employee...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
-              <input required type="date" className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.date} onChange={e=>setForm({...form, date: e.target.value})} />
-              <select className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.type} onChange={e=>setForm({...form, type: e.target.value})}><option>Sick</option><option>Vacation</option><option>Personal</option></select>
-              <div className="flex justify-end gap-3"><button type="button" onClick={()=>setShowModal(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button><button type="submit" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">Save</button></div>
+              <select required className="w-full p-2 border rounded bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" value={form.employeeId} onChange={e=>setForm({...form, employeeId: e.target.value})}><option value="">Select Employee...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
+              <input required type="date" className="w-full p-2 border rounded bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" value={form.date} onChange={e=>setForm({...form, date: e.target.value})} />
+              <select className="w-full p-2 border rounded bg-[var(--background-main)] border-[var(--border-color)] text-[var(--text-primary)]" value={form.type} onChange={e=>setForm({...form, type: e.target.value})}><option>Sick</option><option>Vacation</option><option>Personal</option></select>
+              <div className="flex justify-end gap-3"><button type="button" onClick={()=>setShowModal(false)} className="px-3 py-2 text-[var(--text-secondary)]">Cancel</button><button type="submit" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">Save</button></div>
             </form>
           </div>
         </div>
