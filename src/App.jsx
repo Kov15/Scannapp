@@ -392,6 +392,7 @@ export default function AquaTimeControl() {
 
   // 3. Dark Mode Toggle Effect (FIXED: Uses class toggle on root)
   useEffect(() => {
+    // Apply theme class to root element
     const root = document.documentElement;
     if (isDarkMode) {
       root.classList.add('dark');
@@ -601,17 +602,13 @@ function ScannerMode({ user }) {
     const scannedCode = code.trim();
     setCode('');
     
-    // FIX: Scanner reads 12 digits (EAN-13 minus first digit).
-    // The employee ID is 5 digits, stored as '10001', '10002', etc.
-    // We extract the 5 digits corresponding to positions 7, 8, 9, 10, 11 of the 12-digit output.
-    if (scannedCode.length !== 12) {
-        showFeedback('error', 'Scanner input must be 12 digits.');
+    // FIX: QR code input is exactly 5 digits. We only match the entire input.
+    if (scannedCode.length !== 5) {
+        showFeedback('error', 'Scanner input must be 5 digits (QR Code).');
         return;
     }
     
-    // Scans 12 digits (D2 through D13).
-    // In a 12-character input stream (0-indexed), slice(6, 11) extracts indices 6, 7, 8, 9, 10.
-    const scannedIDSegment = scannedCode.slice(6, 11);
+    const scannedIDSegment = scannedCode; // Use entire 5-digit code
     
     // Find employee using the 5-digit segment
     const employee = employees.find(emp => emp.barcode === scannedIDSegment && emp.status === 'Active');
@@ -1047,7 +1044,7 @@ function AnalyticsTab({ employees, attendance }) {
          <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
              {/* Employee Selector */}
              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Users size={16} className="text-slate-400 dark:text-slate-500" />
+                <Users size={16} className="text-slate-400" />
                 <select 
                     value={selectedEmployeeId} 
                     onChange={(e) => setSelectedEmployeeId(e.target.value)}
