@@ -36,7 +36,7 @@ import {
   Plus, 
   Trash2, 
   Edit,
-  Download,
+  Download, 
   AlertTriangle,
   Menu,
   ChevronLeft,
@@ -51,9 +51,11 @@ import {
   Activity, 
   PieChart,
   Calendar,
-  QrCode, // Changed from Barcode to QrCode icon
+  QrCode, 
   Sun,
-  Moon
+  Moon,
+  Bell,        // Added
+  Smartphone   // Added
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -68,14 +70,15 @@ const ADMIN_CONFIG = {
 };
 
 const firebaseConfig = {
-apiKey: "AIzaSyBuo6fP2vgnRNTXetaeH9Po10545rDbr9s",
-authDomain: "aquascanapp.firebaseapp.com",
-projectId: "aquascanapp",
-storageBucket: "aquascanapp.firebasestorage.app",
-messagingSenderId: "716371620836",
-appId: "1:716371620836:web:038d97ff8ea6e6b03a4df1",
-measurementId: "G-MVLXM5RHWN"
+  apiKey: "AIzaSyBuo6fP2vgnRNTXetaeH9Po10545rDbr9s",
+  authDomain: "aquascanapp.firebaseapp.com",
+  projectId: "aquascanapp",
+  storageBucket: "aquascanapp.firebasestorage.app",
+  messagingSenderId: "716371620836",
+  appId: "1:716371620836:web:038d97ff8ea6e6b03a4df1",
+  measurementId: "G-MVLXM5RHWN"
 };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -94,6 +97,39 @@ const formatCurrency = (amount) => {
 
 const calculateHours = (ms) => {
   return (ms / (1000 * 60 * 60)).toFixed(2);
+};
+
+// --- PUSHOVER NOTIFICATION SERVICE ---
+const sendPushoverNotification = async (title, message) => {
+  try {
+    const config = JSON.parse(localStorage.getItem('aqua_pushover_config') || '{}');
+    
+    if (!config.userKey || !config.apiToken || !config.enabled) {
+      console.log("Pushover not configured or disabled");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('user', config.userKey);
+    formData.append('token', config.apiToken);
+    formData.append('title', title);
+    formData.append('message', message);
+    formData.append('sound', config.sound || 'cashregister'); // Updated to use config
+
+    // NOTE: Using corsproxy.io to bypass CORS restrictions in the browser environment
+    // In a real production app, this should be done via a backend Cloud Function
+    const response = await fetch('https://corsproxy.io/?' + encodeURIComponent('https://api.pushover.net/1/messages.json'), {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`Pushover API Error: ${response.statusText}`);
+    }
+    console.log("Notification sent successfully");
+  } catch (error) {
+    console.error("Failed to send Pushover notification:", error);
+  }
 };
 
 // --- Custom SVG Charts (No external lib needed) ---
@@ -333,7 +369,7 @@ function QrCodeDisplayModal({ employee, onClose }) {
 /* MAIN COMPONENT                              */
 /* -------------------------------------------------------------------------- */
 
-export default function AquaTimeControl() {
+export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const { route, navigate } = useHashRoute();
@@ -650,6 +686,13 @@ function ScannerMode({ user }) {
       });
 
       showFeedback('success', isCheckIn ? 'Checked In' : 'Checked Out', employee);
+      
+      // SEND PUSHOVER NOTIFICATION
+      const formattedTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      sendPushoverNotification(
+        "Aqua Scan Alert", 
+        `${employee.name} has scanned ${isCheckIn ? 'IN' : 'OUT'} at ${formattedTime}`
+      );
 
     } catch (error) {
       console.error("Scan Error", error);
@@ -799,6 +842,7 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
           <MenuItem id="attendance" icon={Clock} label={isSidebarOpen ? "Attendance" : ""} />
           <MenuItem id="payroll" icon={Euro} label={isSidebarOpen ? "Payroll" : ""} />
           <MenuItem id="absences" icon={CalendarOff} label={isSidebarOpen ? "Absences" : ""} />
+          <MenuItem id="settings" icon={Settings} label={isSidebarOpen ? "Settings" : ""} />
         </nav>
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-700">
@@ -842,8 +886,140 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
             {activeTab === 'attendance' && <AttendanceTab attendance={attendance} />}
             {activeTab === 'payroll' && <PayrollTab employees={employees} user={user} />}
             {activeTab === 'absences' && <AbsencesTab employees={employees} user={user} />}
+            {activeTab === 'settings' && <SettingsTab />}
         </div>
       </main>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* SETTINGS TAB (NEW)                                    */
+/* -------------------------------------------------------------------------- */
+
+function SettingsTab() {
+  const [config, setConfig] = useState({ userKey: '', apiToken: '', enabled: false, sound: 'cashregister' });
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('aqua_pushover_config');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Ensure sound property exists for legacy configs
+      if (!parsed.sound) parsed.sound = 'cashregister';
+      setConfig(parsed);
+    }
+  }, []);
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    localStorage.setItem('aqua_pushover_config', JSON.stringify(config));
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 3000);
+  };
+
+  const handleTest = () => {
+    sendPushoverNotification("Aqua Test", "This is a test message from your Admin Dashboard.");
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+       <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+             <div className="bg-indigo-100 dark:bg-indigo-900/50 p-3 rounded-xl text-indigo-600 dark:text-indigo-400">
+               <Bell size={24} />
+             </div>
+             <div>
+               <h2 className="text-xl font-bold text-slate-800 dark:text-white">Pushover Notifications</h2>
+               <p className="text-slate-500 dark:text-slate-400 text-sm">Configure mobile alerts for employee scans.</p>
+             </div>
+          </div>
+
+          <form onSubmit={handleSave} className="space-y-4">
+             <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
+                <div className="flex items-center gap-2">
+                   <Smartphone size={20} className="text-slate-500" />
+                   <span className="font-medium text-slate-700 dark:text-white">Enable Notifications</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={config.enabled} onChange={e => setConfig({...config, enabled: e.target.checked})} />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                </label>
+             </div>
+
+             <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User Key</label>
+                <input 
+                  type="text" 
+                  value={config.userKey} 
+                  onChange={e => setConfig({...config, userKey: e.target.value})} 
+                  className="w-full p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-sm"
+                  placeholder="e.g. uQiR9..."
+                />
+             </div>
+
+             <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">API Token/Key</label>
+                <input 
+                  type="password" 
+                  value={config.apiToken} 
+                  onChange={e => setConfig({...config, apiToken: e.target.value})} 
+                  className="w-full p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-sm"
+                  placeholder="e.g. aToK8..."
+                />
+             </div>
+
+             <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Notification Sound</label>
+                <select
+                  value={config.sound || 'cashregister'}
+                  onChange={e => setConfig({...config, sound: e.target.value})}
+                  className="w-full p-3 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-sm"
+                >
+                  <option value="pushover">Pushover (Default)</option>
+                  <option value="cashregister">Cash Register</option>
+                  <option value="bike">Bike</option>
+                  <option value="bugle">Bugle</option>
+                  <option value="classical">Classical</option>
+                  <option value="cosmic">Cosmic</option>
+                  <option value="falling">Falling</option>
+                  <option value="gamelan">Gamelan</option>
+                  <option value="incoming">Incoming</option>
+                  <option value="intermission">Intermission</option>
+                  <option value="magic">Magic</option>
+                  <option value="mechanical">Mechanical</option>
+                  <option value="pianobar">Piano Bar</option>
+                  <option value="siren">Siren</option>
+                  <option value="spacealarm">Space Alarm</option>
+                  <option value="tugboat">Tugboat</option>
+                  <option value="alien">Alien Alarm</option>
+                  <option value="climb">Climb</option>
+                  <option value="persistent">Persistent</option>
+                  <option value="echo">Echo</option>
+                  <option value="updown">Up Down</option>
+                  <option value="none">None (Silent)</option>
+                </select>
+             </div>
+
+             <div className="pt-4 flex items-center justify-between">
+                <button type="button" onClick={handleTest} className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium text-sm">
+                   Send Test Notification
+                </button>
+
+                <button type="submit" className="bg-cyan-600 text-white px-6 py-2 rounded-lg hover:bg-cyan-700 transition-colors flex items-center gap-2">
+                   {isSaved ? <CheckCircle2 size={18} /> : null}
+                   {isSaved ? 'Saved!' : 'Save Configuration'}
+                </button>
+             </div>
+          </form>
+
+          <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 text-sm rounded-lg flex gap-3 items-start">
+             <AlertTriangle size={20} className="shrink-0 mt-0.5" />
+             <p>
+                <strong>Note:</strong> Configuration is saved locally to this browser/device. If you use multiple devices for scanning (Kiosks), you must configure this setting on each device independently.
+             </p>
+          </div>
+       </div>
     </div>
   );
 }
@@ -1040,11 +1216,11 @@ function AnalyticsTab({ employees, attendance }) {
     <div className="space-y-6">
       {/* Control Bar */}
       <div className="flex flex-col xl:flex-row justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm gap-4">
-         
+          
          <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
              {/* Employee Selector */}
              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Users size={16} className="text-slate-400" />
+                <Users size={16} className="text-slate-400 dark:text-slate-500" />
                 <select 
                     value={selectedEmployeeId} 
                     onChange={(e) => setSelectedEmployeeId(e.target.value)}
@@ -1182,28 +1358,28 @@ function OverviewTab({ employees, attendance, user }) {
     // NOTE: Replace alert with custom modal for production
     if (!window.confirm(`Force checkout for ${emp.name}?`)) return;
     try {
-         const timestamp = new Date().toISOString();
-         let hours = 0;
-         if (emp.lastCheckInTime) {
-             hours = (new Date().getTime() - new Date(emp.lastCheckInTime).getTime()) / (1000 * 60 * 60);
-         }
-         // NOTE: Changed to 'public/data' for shared access
-         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
-             employeeId: emp.id,
-             employeeName: emp.name,
-             timestamp,
-             action: 'OUT',
-             calculatedHours: hours,
-             earnedAmount: hours * (emp.hourlyRate || 0),
-             note: 'Admin Forced'
-         });
-         // NOTE: Changed to 'public/data' for shared access
-         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id), {
-             isCheckedIn: false,
-             lastCheckInTime: null,
-             balance: (emp.balance || 0) + (hours * (emp.hourlyRate || 0)),
-             totalHours: (emp.totalHours || 0) + hours
-         });
+          const timestamp = new Date().toISOString();
+          let hours = 0;
+          if (emp.lastCheckInTime) {
+              hours = (new Date().getTime() - new Date(emp.lastCheckInTime).getTime()) / (1000 * 60 * 60);
+          }
+          // NOTE: Changed to 'public/data' for shared access
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
+              employeeId: emp.id,
+              employeeName: emp.name,
+              timestamp,
+              action: 'OUT',
+              calculatedHours: hours,
+              earnedAmount: hours * (emp.hourlyRate || 0),
+              note: 'Admin Forced'
+          });
+          // NOTE: Changed to 'public/data' for shared access
+          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id), {
+              isCheckedIn: false,
+              lastCheckInTime: null,
+              balance: (emp.balance || 0) + (hours * (emp.hourlyRate || 0)),
+              totalHours: (emp.totalHours || 0) + hours
+          });
     } catch(e) { console.error(e); }
   };
 
@@ -1435,13 +1611,30 @@ function EmployeesTab({ employees, attendance, user }) {
 
 // --- Attendance Logs ---
 function AttendanceTab({ attendance }) {
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this log entry? This cannot be undone.')) {
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', id));
+      } catch (error) {
+        console.error("Error deleting log:", error);
+        window.alert("Failed to delete log.");
+      }
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
       <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50"><h3 className="font-semibold text-slate-800 dark:text-white">Attendance Log</h3></div>
       <div className="overflow-x-auto max-h-[600px]">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs sticky top-0">
-            <tr><th className="px-6 py-3">Time</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Action</th><th className="px-6 py-3">Hrs</th></tr>
+            <tr>
+              <th className="px-6 py-3">Time</th>
+              <th className="px-6 py-3">Employee</th>
+              <th className="px-6 py-3">Action</th>
+              <th className="px-6 py-3">Hrs</th>
+              <th className="px-6 py-3 text-right">Manage</th>
+            </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
             {attendance.map(log => (
@@ -1450,6 +1643,15 @@ function AttendanceTab({ attendance }) {
                 <td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{log.employeeName}</td>
                 <td className="px-6 py-3"><span className={`px-2 py-0.5 rounded text-xs font-bold ${log.action === 'IN' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>{log.action}</span></td>
                 <td className="px-6 py-3 text-slate-600 dark:text-slate-300">{log.calculatedHours ? Number(log.calculatedHours).toFixed(2) : '-'}</td>
+                <td className="px-6 py-3 text-right">
+                  <button 
+                    onClick={() => handleDelete(log.id)} 
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    title="Delete Entry"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
