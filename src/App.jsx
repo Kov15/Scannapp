@@ -13,7 +13,7 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc, 
-  setDoc, // Added setDoc for saving settings
+  setDoc, 
   doc, 
   getDoc, 
   query, 
@@ -21,7 +21,8 @@ import {
   serverTimestamp, 
   orderBy, 
   limit, 
-  where 
+  where,
+  writeBatch 
 } from 'firebase/firestore';
 import { 
   Scan, 
@@ -37,7 +38,7 @@ import {
   Search, 
   Plus, 
   Trash2, 
-  Edit,
+  Edit, 
   Download, 
   AlertTriangle, 
   Menu, 
@@ -57,11 +58,16 @@ import {
   Sun, 
   Moon, 
   Bell, 
-  Smartphone 
+  Smartphone,
+  FileText, 
+  Save,
+  Filter, 
+  CheckSquare, 
+  Square 
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
-/* CONFIGURATION & FIREBASE SETUP              */
+/* CONFIGURATION & FIREBASE SETUP             */
 /* -------------------------------------------------------------------------- */
 
 const ADMIN_CONFIG = {
@@ -86,7 +92,7 @@ const db = getFirestore(app);
 const appId = 'aqua-v1';
 
 /* -------------------------------------------------------------------------- */
-/* UTILITIES & CHARTS                          */
+/* UTILITIES & CHARTS                         */
 /* -------------------------------------------------------------------------- */
 
 const formatCurrency = (amount) => {
@@ -117,6 +123,14 @@ const formatDateSafe = (dateString, options = {}) => {
   if (!dateString) return '-';
   const d = new Date(dateString);
   return isNaN(d.getTime()) ? '-' : d.toLocaleString(undefined, options);
+};
+
+// Custom Format: 24/5/2025 Monday
+const formatHistoryDate = (dateStr) => {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '-';
+  const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${dayName}`;
 };
 
 // --- SMART DURATION CALCULATOR (GLOBAL) ---
@@ -190,21 +204,11 @@ const LiveDuration = ({ startTime }) => {
 // --- PUSHOVER NOTIFICATION SERVICE (GLOBAL) ---
 const sendPushoverNotification = async (title, message) => {
   try {
-    // 1. Fetch config from Firestore (Global) instead of localStorage
     const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'pushover');
     const settingsSnap = await getDoc(settingsRef);
-    
-    if (!settingsSnap.exists()) {
-        console.log("Pushover settings not configured in DB.");
-        return;
-    }
-
+    if (!settingsSnap.exists()) return;
     const config = settingsSnap.data();
-    
-    if (!config.userKey || !config.apiToken || !config.enabled) {
-        console.log("Pushover disabled globally or incomplete.");
-        return;
-    }
+    if (!config.userKey || !config.apiToken || !config.enabled) return;
 
     const formData = new FormData();
     formData.append('user', config.userKey);
@@ -214,25 +218,28 @@ const sendPushoverNotification = async (title, message) => {
     formData.append('sound', config.sound || 'cashregister');
 
     await fetch('https://corsproxy.io/?' + encodeURIComponent('https://api.pushover.net/1/messages.json'), { method: 'POST', body: formData });
-    console.log("Global Notification Sent");
   } catch (error) { console.error("Pushover Error:", error); }
 };
 
 const SimpleBarChart = ({ data, labels, color = "#0891b2" }) => {
   const max = Math.max(...data) || 1;
+  const isScrollable = data.length > 12;
+
   return (
-    <div className="flex items-end justify-between h-40 gap-2 w-full">
-      {data.map((val, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
-          <div className="relative w-full bg-slate-100 dark:bg-slate-700 rounded-t-md overflow-hidden flex items-end h-full">
-             <div className="w-full transition-all duration-700 ease-out relative group-hover:opacity-90" style={{ height: `${isNaN(val) ? 0 : (val / max) * 100}%`, backgroundColor: color }}></div>
-             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 font-mono">
-               {isNaN(val) ? 0 : val.toFixed(1)} hrs
-             </div>
-          </div>
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider truncate w-full text-center">{labels[i]}</span>
+    <div className={`w-full ${isScrollable ? 'overflow-x-auto pb-4' : ''}`}>
+        <div className={`flex items-end justify-between h-40 gap-2 ${isScrollable ? 'min-w-[1000px]' : 'w-full'}`}>
+          {data.map((val, i) => (
+            <div key={i} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
+              <div className="relative w-full bg-slate-100 dark:bg-slate-700 rounded-t-md overflow-hidden flex items-end h-full">
+                 <div className="w-full transition-all duration-700 ease-out relative group-hover:opacity-90" style={{ height: `${isNaN(val) ? 0 : (val / max) * 100}%`, backgroundColor: color }}></div>
+                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 font-mono">
+                   {isNaN(val) ? 0 : val.toFixed(1)} hrs
+                 </div>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider truncate w-full text-center">{labels[i]}</span>
+            </div>
+          ))}
         </div>
-      ))}
     </div>
   );
 };
@@ -299,6 +306,258 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
               <div className="mt-4 flex justify-end gap-2"><button onClick={onClose} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">Done</button></div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- NEW COMPONENT: EMPLOYEE HISTORY MODAL ---
+function EmployeeHistoryModal({ employee, attendance, onClose }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editTime, setEditTime] = useState('');
+  
+  // Filtering States - UPDATED TO RANGE
+  // Default: Current Month
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+  const [startDate, setStartDate] = useState(startOfMonth);
+  const [endDate, setEndDate] = useState(endOfMonth);
+  const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
+
+  if (!employee) return null;
+
+  // Filter logs for this employee
+  let empLogs = attendance.filter(log => log.employeeId === employee.id);
+
+  // Apply Date Filters
+  empLogs = empLogs.filter(log => {
+      const d = new Date(log.timestamp);
+      if (isNaN(d.getTime())) return false;
+      const logDate = d.toISOString().slice(0, 10);
+      
+      return logDate >= startDate && logDate <= endDate;
+  });
+
+  // Group logs by date
+  const logsByDate = useMemo(() => {
+    const groups = {};
+    empLogs.forEach(log => {
+      const dateKey = new Date(log.timestamp).toLocaleDateString(); // Local format for grouping key
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(log);
+    });
+    return groups;
+  }, [empLogs]);
+
+  // Calculate daily stats and check paid status
+  const dailyStats = Object.keys(logsByDate).reduce((acc, dateKey) => {
+    const logs = logsByDate[dateKey];
+    const sortedLogs = [...logs].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    let hours = 0;
+    let isDayPaid = true; // Assume paid, unless we find an unpaid OUT log
+    let hasOutLog = false;
+
+    sortedLogs.forEach(log => {
+        if(log.action === 'OUT') {
+            hasOutLog = true;
+            hours += getSmartDuration(log, attendance); // Pass full attendance for accurate smart calculation
+            if (!log.isPaid) isDayPaid = false;
+        }
+    });
+    
+    // If no OUT log (only IN), it's technically not "paid" or "unpaid" yet, but for filtering we can treat as open.
+    if (!hasOutLog && logs.length > 0) isDayPaid = false;
+
+    acc[dateKey] = {
+        hours: hours,
+        pay: hours * (parseFloat(employee.hourlyRate) || 0),
+        isPaid: isDayPaid,
+        logs: sortedLogs
+    };
+    return acc;
+  }, {});
+
+  // Apply Unpaid Filter to the *Days* list
+  let visibleDates = Object.keys(dailyStats);
+  if (showUnpaidOnly) {
+      visibleDates = visibleDates.filter(date => !dailyStats[date].isPaid && dailyStats[date].hours > 0);
+  }
+
+  // Sort dates descending
+  visibleDates.sort((a,b) => {
+      // Need to parse the date key back to compare. 
+      // Note: LocaleDateString format varies. Ideally we'd use ISO keys, but for display we reused the key.
+      // Let's rely on the first log's timestamp for robust sorting.
+      const timeA = new Date(dailyStats[a].logs[0].timestamp).getTime();
+      const timeB = new Date(dailyStats[b].logs[0].timestamp).getTime();
+      return timeB - timeA;
+  });
+
+  const handleEditClick = (log) => {
+    const date = new Date(log.timestamp);
+    const tzOffset = date.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(date - tzOffset)).toISOString().slice(0, 16);
+    setEditTime(localISOTime);
+    setEditingId(log.id);
+  };
+
+  const handleSaveEdit = async (logId) => {
+    try {
+        const newDate = new Date(editTime);
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', logId), {
+            timestamp: newDate.toISOString(),
+            calculatedHours: 0 
+        });
+        setEditingId(null);
+    } catch (e) { console.error("Update failed", e); alert("Update failed"); }
+  };
+
+  const handleDeleteLog = async (logId) => {
+      if(window.confirm("Delete this log?")) {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', logId));
+      }
+  };
+
+  const toggleDayPaidStatus = async (dateKey) => {
+      const dayData = dailyStats[dateKey];
+      const newStatus = !dayData.isPaid;
+      
+      try {
+          const batch = writeBatch(db);
+          // Mark all OUT logs for this day as paid/unpaid
+          dayData.logs.filter(l => l.action === 'OUT').forEach(log => {
+              const ref = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', log.id);
+              batch.update(ref, { isPaid: newStatus });
+          });
+          await batch.commit();
+      } catch(e) {
+          console.error("Error updating paid status", e);
+      }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[85vh]">
+        <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-6 flex justify-between items-center text-white shrink-0">
+          <div>
+            <h2 className="text-2xl font-bold flex items-center gap-2"><FileText size={24} /> {employee.name}</h2>
+            <p className="text-cyan-100 text-sm mt-1">Rate: {formatCurrency(employee.hourlyRate)}/hr • ID: {employee.barcode}</p>
+          </div>
+          <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-full transition-colors"><X size={24} /></button>
+        </div>
+        
+        {/* FILTERS TOOLBAR */}
+        <div className="bg-slate-100 dark:bg-slate-900 p-3 flex flex-wrap gap-4 items-center border-b border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-500 font-medium">From:</span>
+                <input 
+                    type="date" 
+                    value={startDate} 
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="p-1.5 rounded border border-slate-300 dark:border-slate-600 text-sm dark:bg-slate-800 dark:text-white"
+                />
+            </div>
+            <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-500 font-medium">To:</span>
+                <input 
+                    type="date" 
+                    value={endDate} 
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="p-1.5 rounded border border-slate-300 dark:border-slate-600 text-sm dark:bg-slate-800 dark:text-white"
+                />
+            </div>
+            <div className="h-6 w-px bg-slate-300 dark:bg-slate-700 mx-2 hidden sm:block"></div>
+            <button 
+                onClick={() => setShowUnpaidOnly(!showUnpaidOnly)}
+                className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors ${showUnpaidOnly ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300 font-medium' : 'bg-white text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600'}`}
+            >
+                <Filter size={14} />
+                {showUnpaidOnly ? 'Showing Unpaid Only' : 'Show All'}
+            </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto flex-1">
+            {visibleDates.length === 0 ? (
+                <div className="text-center text-slate-400 py-10 flex flex-col items-center">
+                    <CalendarOff size={48} className="mb-4 opacity-50"/>
+                    <p>No records found for this period.</p>
+                </div>
+            ) : (
+                <div className="space-y-6">
+                    {visibleDates.map(dateKey => {
+                        const stats = dailyStats[dateKey];
+                        // Use the timestamp of the first log to format the header date correctly
+                        const headerDateStr = stats.logs.length > 0 ? stats.logs[0].timestamp : null;
+                        
+                        return (
+                        <div key={dateKey} className={`border rounded-xl overflow-hidden ${stats.isPaid ? 'border-green-200 dark:border-green-900/50' : 'border-orange-200 dark:border-orange-900/50'}`}>
+                            <div className={`p-3 flex justify-between items-center border-b ${stats.isPaid ? 'bg-green-50 dark:bg-green-900/20 border-green-100' : 'bg-orange-50 dark:bg-orange-900/20 border-orange-100'}`}>
+                                <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                                    {/* Format: 24/5/2025 Monday */}
+                                    {headerDateStr ? formatHistoryDate(headerDateStr) : dateKey}
+                                </span>
+                                <div className="flex gap-4 text-sm items-center">
+                                    <span className="text-slate-600 dark:text-slate-400 hidden sm:inline">Total: <strong className="text-slate-800 dark:text-white">{formatDuration(stats.hours)}</strong></span>
+                                    <span className="text-slate-600 dark:text-slate-400">Owed: <strong className="text-slate-800 dark:text-white">{formatCurrency(stats.pay)}</strong></span>
+                                    
+                                    {/* Paid Toggle Button */}
+                                    <button 
+                                        onClick={() => toggleDayPaidStatus(dateKey)}
+                                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold transition-all ${stats.isPaid ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-white border border-orange-300 text-orange-600 hover:bg-orange-100'}`}
+                                        title={stats.isPaid ? "Mark as Unpaid" : "Mark as Paid"}
+                                    >
+                                        {stats.isPaid ? <CheckSquare size={14}/> : <Square size={14}/>}
+                                        {stats.isPaid ? 'PAID' : 'UNPAID'}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="divide-y divide-slate-100 dark:divide-slate-700/50 bg-white dark:bg-slate-800">
+                                {stats.logs.map(log => {
+                                    const duration = log.action === 'OUT' ? getSmartDuration(log, attendance) : 0;
+                                    const isEditing = editingId === log.id;
+                                    
+                                    return (
+                                        <div key={log.id} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                            <div className="flex items-center gap-4">
+                                                <span className={`px-2 py-1 rounded text-xs font-bold w-12 text-center ${log.action === 'IN' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                    {log.action}
+                                                </span>
+                                                {isEditing ? (
+                                                    <input 
+                                                        type="datetime-local" 
+                                                        value={editTime}
+                                                        onChange={e => setEditTime(e.target.value)}
+                                                        className="border rounded p-1 text-sm dark:bg-slate-600 dark:text-white"
+                                                    />
+                                                ) : (
+                                                    <span className="text-slate-700 dark:text-slate-300 font-mono text-sm">
+                                                        {new Date(log.timestamp).toLocaleTimeString()}
+                                                    </span>
+                                                )}
+                                                {log.action === 'OUT' && !isEditing && (
+                                                    <span className="text-xs text-slate-400">({formatDuration(duration)})</span>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {isEditing ? (
+                                                    <button onClick={() => handleSaveEdit(log.id)} className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"><Save size={14}/></button>
+                                                ) : (
+                                                    <button onClick={() => handleEditClick(log)} className="p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded"><Edit size={14}/></button>
+                                                )}
+                                                <button onClick={() => handleDeleteLog(log.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )})}
+                </div>
+            )}
         </div>
       </div>
     </div>
@@ -378,14 +637,29 @@ function AdminLogin({ navigate }) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault(); setIsLoading(true); setError('');
-    setTimeout(() => {
-      if (username === ADMIN_CONFIG.username && password === ADMIN_CONFIG.password) {
-        localStorage.setItem('aqua_admin_session', JSON.stringify({ timestamp: Date.now(), user: username }));
-        navigate('/admin');
-      } else { setError('Invalid credentials.'); setIsLoading(false); }
-    }, 800);
+    
+    try {
+        let currentPassword = ADMIN_CONFIG.password;
+        // Fetch dynamic password if it exists
+        const securityDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'security'));
+        if (securityDoc.exists() && securityDoc.data().password) {
+            currentPassword = securityDoc.data().password;
+        }
+
+        if (username === ADMIN_CONFIG.username && password === currentPassword) {
+            localStorage.setItem('aqua_admin_session', JSON.stringify({ timestamp: Date.now(), user: username }));
+            navigate('/admin');
+        } else {
+            setError('Invalid credentials.');
+            setIsLoading(false);
+        }
+    } catch (err) {
+        console.error(err);
+        setError('Login error.');
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -396,7 +670,7 @@ function AdminLogin({ navigate }) {
           {error && <div className="bg-red-50 text-red-600 p-3 rounded text-sm">{error}</div>}
           <input type="text" value={username} onChange={e=>setUsername(e.target.value)} className="w-full p-3 border rounded dark:bg-slate-700 dark:text-white" placeholder="Username" />
           <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded dark:bg-slate-700 dark:text-white" placeholder="Password" />
-          <button type="submit" disabled={isLoading} className="w-full bg-cyan-600 text-white p-3 rounded font-bold hover:bg-cyan-700">{isLoading ? '...' : 'Login'}</button>
+          <button type="submit" disabled={isLoading} className="w-full bg-cyan-600 text-white p-3 rounded font-bold hover:bg-cyan-700">{isLoading ? 'Logging in...' : 'Login'}</button>
         </form>
         <button onClick={()=>navigate('/')} className="block w-full text-center mt-4 text-sm text-slate-500">Back</button>
       </div>
@@ -426,9 +700,6 @@ function ScannerMode({ user }) {
   const [scanResult, setScanResult] = useState(null); 
   const inputRef = useRef(null);
   
-  // NOTE: In ScannerMode, we don't need to listen to all employees all the time
-  // But we need some basic validation. We'll fetch fresh on scan.
-
   useEffect(() => {
     const focusInterval = setInterval(() => { if (inputRef.current) inputRef.current.focus(); }, 1000);
     return () => clearInterval(focusInterval);
@@ -552,6 +823,10 @@ function SettingsTab() {
   const [config, setConfig] = useState({ userKey: '', apiToken: '', enabled: false, sound: 'cashregister' });
   const [isSaved, setIsSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Password State
+  const [passForm, setPassForm] = useState({ newPass: '', confirmPass: '' });
+  const [isPassSaved, setIsPassSaved] = useState(false);
 
   // Load from DB instead of local storage
   useEffect(() => {
@@ -583,48 +858,104 @@ function SettingsTab() {
     }
   };
 
+  const handleUpdatePassword = async (e) => {
+      e.preventDefault();
+      if (passForm.newPass !== passForm.confirmPass) {
+          alert("Passwords do not match!");
+          return;
+      }
+      if (!passForm.newPass) return;
+
+      try {
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'security'), {
+              password: passForm.newPass
+          });
+          setPassForm({ newPass: '', confirmPass: '' });
+          setIsPassSaved(true);
+          setTimeout(() => setIsPassSaved(false), 2000);
+      } catch (e) {
+          console.error("Error updating password:", e);
+          alert("Failed to update password");
+      }
+  };
+
   const handleTest = () => { sendPushoverNotification("Aqua Test", "This is a test message from your Admin Dashboard."); };
   
   if (isLoading) return <div className="p-8 text-center text-slate-500">Loading settings...</div>;
 
   return (
-    <div className="max-w-xl mx-auto bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm">
-        <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Pushover Settings (Global)</h2>
-        <form onSubmit={handleSave} className="space-y-4">
-            <div className="flex items-center gap-2 mb-4"><input type="checkbox" checked={config.enabled} onChange={e=>setConfig({...config, enabled: e.target.checked})} /> <span>Enable Notifications</span></div>
-            <input className="w-full p-2 border rounded" placeholder="User Key" value={config.userKey} onChange={e=>setConfig({...config, userKey: e.target.value})} />
-            <input className="w-full p-2 border rounded" type="password" placeholder="API Token" value={config.apiToken} onChange={e=>setConfig({...config, apiToken: e.target.value})} />
-            
-            <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Notification Sound</label>
-                <select className="w-full p-2 border rounded" value={config.sound} onChange={e=>setConfig({...config, sound: e.target.value})}>
-                    <option value="pushover">Pushover (Default)</option>
-                    <option value="cashregister">Cash Register</option>
-                    <option value="bike">Bike</option>
-                    <option value="bugle">Bugle</option>
-                    <option value="classical">Classical</option>
-                    <option value="cosmic">Cosmic</option>
-                    <option value="falling">Falling</option>
-                    <option value="gamelan">Gamelan</option>
-                    <option value="incoming">Incoming</option>
-                    <option value="intermission">Intermission</option>
-                    <option value="magic">Magic</option>
-                    <option value="mechanical">Mechanical</option>
-                    <option value="pianobar">Piano Bar</option>
-                    <option value="siren">Siren</option>
-                    <option value="spacealarm">Space Alarm</option>
-                    <option value="tugboat">Tugboat</option>
-                    <option value="alien">Alien Alarm</option>
-                    <option value="climb">Climb</option>
-                    <option value="persistent">Persistent</option>
-                    <option value="echo">Echo</option>
-                    <option value="updown">Up Down</option>
-                    <option value="none">None (Silent)</option>
-                </select>
-            </div>
+    <div className="max-w-xl mx-auto space-y-8">
+        {/* Pushover Settings */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm">
+            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Pushover Notifications</h2>
+            <form onSubmit={handleSave} className="space-y-4">
+                <div className="flex items-center gap-2 mb-4"><input type="checkbox" checked={config.enabled} onChange={e=>setConfig({...config, enabled: e.target.checked})} /> <span>Enable Notifications</span></div>
+                <input className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="User Key" value={config.userKey} onChange={e=>setConfig({...config, userKey: e.target.value})} />
+                <input className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" type="password" placeholder="API Token" value={config.apiToken} onChange={e=>setConfig({...config, apiToken: e.target.value})} />
+                
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Notification Sound</label>
+                    <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={config.sound} onChange={e=>setConfig({...config, sound: e.target.value})}>
+                        <option value="pushover">Pushover (Default)</option>
+                        <option value="cashregister">Cash Register</option>
+                        <option value="bike">Bike</option>
+                        <option value="bugle">Bugle</option>
+                        <option value="classical">Classical</option>
+                        <option value="cosmic">Cosmic</option>
+                        <option value="falling">Falling</option>
+                        <option value="gamelan">Gamelan</option>
+                        <option value="incoming">Incoming</option>
+                        <option value="intermission">Intermission</option>
+                        <option value="magic">Magic</option>
+                        <option value="mechanical">Mechanical</option>
+                        <option value="pianobar">Piano Bar</option>
+                        <option value="siren">Siren</option>
+                        <option value="spacealarm">Space Alarm</option>
+                        <option value="tugboat">Tugboat</option>
+                        <option value="alien">Alien Alarm</option>
+                        <option value="climb">Climb</option>
+                        <option value="persistent">Persistent</option>
+                        <option value="echo">Echo</option>
+                        <option value="updown">Up Down</option>
+                        <option value="none">None (Silent)</option>
+                    </select>
+                </div>
 
-            <button className="bg-cyan-600 text-white px-4 py-2 rounded w-full">{isSaved ? 'Saved!' : 'Save Globally'}</button>
-        </form>
+                <button className="bg-cyan-600 text-white px-4 py-2 rounded w-full hover:bg-cyan-700 transition-colors">{isSaved ? 'Saved!' : 'Save Notifications'}</button>
+            </form>
+        </div>
+
+        {/* Security Settings */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border-l-4 border-orange-500">
+            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2">
+                <Lock size={20} className="text-orange-500"/> Admin Security
+            </h2>
+            <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">New Password</label>
+                    <input 
+                        type="password"
+                        className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                        value={passForm.newPass}
+                        onChange={e => setPassForm({...passForm, newPass: e.target.value})}
+                        placeholder="Enter new password"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Confirm Password</label>
+                    <input 
+                        type="password"
+                        className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                        value={passForm.confirmPass}
+                        onChange={e => setPassForm({...passForm, confirmPass: e.target.value})}
+                        placeholder="Confirm new password"
+                    />
+                </div>
+                <button type="submit" className="bg-orange-600 text-white px-4 py-2 rounded w-full hover:bg-orange-700 transition-colors font-medium">
+                    {isPassSaved ? 'Password Updated!' : 'Update Password'}
+                </button>
+            </form>
+        </div>
     </div>
   );
 }
@@ -636,7 +967,8 @@ function AnalyticsTab({ employees, attendance }) {
 
   const navigateDate = (direction) => {
     const newDate = new Date(currentDate);
-    if (range === 'Week') newDate.setDate(newDate.getDate() + (direction * 7));
+    if (range === 'Day') newDate.setDate(newDate.getDate() + direction);
+    else if (range === 'Week') newDate.setDate(newDate.getDate() + (direction * 7));
     else if (range === 'Month') newDate.setMonth(newDate.getMonth() + direction);
     else if (range === 'Year') newDate.setFullYear(newDate.getFullYear() + direction);
     setCurrentDate(newDate);
@@ -646,7 +978,10 @@ function AnalyticsTab({ employees, attendance }) {
     const endWindow = new Date(currentDate);
     const startWindow = new Date(currentDate);
 
-    if (range === 'Week') {
+    if (range === 'Day') {
+        startWindow.setHours(0,0,0,0);
+        endWindow.setHours(23,59,59,999);
+    } else if (range === 'Week') {
         const day = endWindow.getDay();
         const diff = endWindow.getDate() - day + (day === 0 ? -6 : 1); 
         startWindow.setDate(diff);
@@ -691,20 +1026,46 @@ function AnalyticsTab({ employees, attendance }) {
     });
 
     const avgShift = outs.length ? (totalH/outs.length) : 0;
-    const chartData = range === 'Month' ? [0,0,0,0,0] : (range==='Week'?[0,0,0,0,0,0,0]:new Array(12).fill(0));
-    const labels = range === 'Month' ? ['W1','W2','W3','W4','W5'] : (range==='Week'?['Mon','Tue','Wed','Thu','Fri','Sat','Sun']:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']);
+    
+    // Chart Configuration
+    let chartData, labels;
+
+    if (range === 'Day') {
+        chartData = new Array(24).fill(0);
+        labels = Array.from({length: 24}, (_, i) => `${i.toString().padStart(2,'0')}:00`);
+    } else if (range === 'Month') {
+        chartData = [0,0,0,0,0];
+        labels = ['W1','W2','W3','W4','W5'];
+    } else if (range === 'Week') {
+        chartData = [0,0,0,0,0,0,0];
+        labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    } else { // Year
+        chartData = new Array(12).fill(0);
+        labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    }
 
     outs.forEach(log => {
         const d = new Date(log.timestamp);
         if (isNaN(d.getTime())) return;
         const dur = getSmartDuration(log, attendance);
-        if (range === 'Week') { const day = d.getDay(); chartData[day===0?6:day-1] += dur; }
-        else if (range === 'Month') { const wk = Math.min(4, Math.floor((d.getDate()-1)/7)); chartData[wk] += dur; }
-        else { chartData[d.getMonth()] += dur; }
+        
+        if (range === 'Day') {
+             const hour = d.getHours();
+             chartData[hour] += dur;
+        } else if (range === 'Week') { 
+             const day = d.getDay(); 
+             chartData[day===0?6:day-1] += dur; 
+        } else if (range === 'Month') { 
+             const wk = Math.min(4, Math.floor((d.getDate()-1)/7)); 
+             chartData[wk] += dur; 
+        } else { 
+             chartData[d.getMonth()] += dur; 
+        }
     });
 
     let displayTitle = "";
-    if (range === 'Week') displayTitle = `${formatDateSafe(startWindow)} - ${formatDateSafe(endWindow)}`;
+    if (range === 'Day') displayTitle = formatDateSafe(startWindow, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    else if (range === 'Week') displayTitle = `${formatDateSafe(startWindow)} - ${formatDateSafe(endWindow)}`;
     else if (range === 'Month') displayTitle = startWindow.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     else displayTitle = startWindow.getFullYear();
 
@@ -723,7 +1084,7 @@ function AnalyticsTab({ employees, attendance }) {
       <div className="flex flex-col xl:flex-row justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm gap-4">
          <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
              <div className="flex items-center gap-2 w-full sm:w-auto"><Users size={16} className="text-slate-400 dark:text-slate-500" /><select value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-48 font-medium"><option value="all">All Employees</option>{employees.map(emp => (<option key={emp.id} value={emp.id}>{emp.name}</option>))}</select></div>
-             <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg w-full sm:w-auto">{['Week', 'Month', 'Year'].map(r => (<button key={r} onClick={() => { setRange(r); setCurrentDate(new Date()); }} className={`flex-1 sm:flex-none px-3 py-1 text-sm rounded-md transition-all ${range === r ? 'bg-white shadow text-cyan-600 dark:bg-slate-600 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}>{r}</button>))}</div>
+             <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg w-full sm:w-auto">{['Day', 'Week', 'Month', 'Year'].map(r => (<button key={r} onClick={() => { setRange(r); setCurrentDate(new Date()); }} className={`flex-1 sm:flex-none px-3 py-1 text-sm rounded-md transition-all ${range === r ? 'bg-white shadow text-cyan-600 dark:bg-slate-600 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}>{r}</button>))}</div>
          </div>
          <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600"><button onClick={() => navigateDate(-1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors"><ChevronLeft size={20} /></button><span className="font-bold text-slate-700 dark:text-white w-40 text-center text-sm">{metrics.displayTitle}</span><button onClick={() => navigateDate(1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors"><ChevronRight size={20} /></button></div>
          <button onClick={handleExportCSV} className="flex items-center gap-2 text-slate-500 hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400 px-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 w-full xl:w-auto justify-center"><Download size={16} /> Export CSV</button>
@@ -804,6 +1165,9 @@ function EmployeesTab({ employees, attendance, user }) {
   const [showBarcode, setShowBarcode] = useState(null); 
   const [geminiLoading, setGeminiLoading] = useState(false);
   const [geminiResult, setGeminiResult] = useState(null);
+  
+  // State for the new history modal
+  const [historyEmp, setHistoryEmp] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -836,6 +1200,16 @@ function EmployeesTab({ employees, attendance, user }) {
     <div className="space-y-6">
       <GeminiModal isOpen={!!geminiResult || geminiLoading} onClose={() => { setGeminiResult(null); setGeminiLoading(false); }} title={geminiResult?.title || "Analyzing..."} content={geminiResult?.content} isLoading={geminiLoading} />
       {showBarcode && (<QrCodeDisplayModal employee={showBarcode} onClose={() => setShowBarcode(null)} />)}
+      
+      {/* RENDER NEW HISTORY MODAL */}
+      {historyEmp && (
+        <EmployeeHistoryModal 
+            employee={historyEmp} 
+            attendance={attendance} 
+            onClose={() => setHistoryEmp(null)} 
+        />
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between gap-4"><div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18} /><input type="text" placeholder="Search by name or code..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg w-full sm:w-64 text-slate-800 dark:text-white" /></div><button onClick={() => { setFormData({ name: '', barcode: '', hourlyRate: 0, status: 'Active' }); setIsEditing(true); }} className="bg-cyan-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-cyan-700"><Plus size={18} /> Add Employee</button></div>
       {isEditing && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -850,7 +1224,16 @@ function EmployeesTab({ employees, attendance, user }) {
           </div>
         </div>
       )}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{filtered.map(emp => (<div key={emp.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center group hover:border-cyan-300 transition-colors"><div><h4 className="font-bold text-lg text-slate-800 dark:text-white">{emp.name}</h4><p className="text-sm text-slate-500 dark:text-slate-400">ID: {emp.barcode}</p><p className="text-sm text-slate-500 dark:text-slate-400">Bal: {formatCurrency(emp.balance || 0)}</p></div><div className="flex gap-2">{emp.barcode && (<button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg dark:bg-green-900/30 dark:text-green-400" title="Generate QR Code"><QrCode size={16} /></button>)}<button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg dark:bg-indigo-900/30 dark:text-indigo-400"><Sparkles size={16} /></button><button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg text-slate-500 dark:bg-slate-700 dark:text-slate-400"><Edit size={16} /></button><button onClick={() => { if(window.confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg dark:bg-slate-700 dark:text-red-400"><Trash2 size={16} /></button></div></div>))}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{filtered.map(emp => (<div key={emp.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center group hover:border-cyan-300 transition-colors">
+        <div><h4 className="font-bold text-lg text-slate-800 dark:text-white">{emp.name}</h4><p className="text-sm text-slate-500 dark:text-slate-400">ID: {emp.barcode}</p><p className="text-sm text-slate-500 dark:text-slate-400">Bal: {formatCurrency(emp.balance || 0)}</p></div>
+        <div className="flex gap-2">
+            {/* Added History Button */}
+            <button onClick={() => setHistoryEmp(emp)} className="p-2 bg-blue-50 text-blue-600 rounded-lg dark:bg-blue-900/30 dark:text-blue-400" title="View History"><FileText size={16} /></button>
+            {emp.barcode && (<button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg dark:bg-green-900/30 dark:text-green-400" title="Generate QR Code"><QrCode size={16} /></button>)}
+            <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg dark:bg-indigo-900/30 dark:text-indigo-400"><Sparkles size={16} /></button>
+            <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg text-slate-500 dark:bg-slate-700 dark:text-slate-400"><Edit size={16} /></button>
+            <button onClick={() => { if(window.confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg dark:bg-slate-700 dark:text-red-400"><Trash2 size={16} /></button>
+        </div></div>))}</div>
     </div>
   );
 }
