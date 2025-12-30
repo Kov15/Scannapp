@@ -602,6 +602,7 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                                 </div>
                                 <div className="flex gap-4 text-sm items-center">
                                     <span className="text-slate-600 dark:text-slate-400 hidden sm:inline">Total: <strong className="text-slate-800 dark:text-white">{formatDuration(stats.hours)}</strong></span>
+                                    <span className="text-slate-600 dark:text-slate-400">Owed: <strong className="text-slate-800 dark:text-white">{formatCurrency(stats.pay)}</strong></span>
                                     <button onClick={() => toggleDayPaidStatus(dateKey)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold transition-all ${stats.isPaid ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-white border border-orange-300 text-orange-600 hover:bg-orange-100'}`} title={stats.isPaid ? "Mark as Unpaid" : "Mark as Paid"}>
                                         {stats.isPaid ? <CheckSquare size={14}/> : <Square size={14}/>} {stats.isPaid ? 'PAID' : 'UNPAID'}
                                     </button>
