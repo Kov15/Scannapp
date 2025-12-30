@@ -22,7 +22,8 @@ import {
   orderBy, 
   limit, 
   where,
-  writeBatch 
+  writeBatch,
+  increment 
 } from 'firebase/firestore';
 import { 
   Scan, 
@@ -63,7 +64,8 @@ import {
   Save,
   Filter, 
   CheckSquare, 
-  Square 
+  Square,
+  Tag 
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -106,26 +108,21 @@ const calculateHours = (ms) => {
   return (ms / (1000 * 60 * 60)).toFixed(2);
 };
 
-// Helper for display
 const formatDuration = (decimalHours) => {
   if (decimalHours === undefined || decimalHours === null || isNaN(decimalHours)) return '-';
-  
   const hours = Math.floor(decimalHours);
   const minutes = Math.round((decimalHours - hours) * 60);
-  
   if (hours === 0 && minutes === 0) return '< 1m';
   if (hours === 0) return `${minutes}m`;
   return `${hours}h ${minutes}m`;
 };
 
-// Robust Date Formatter to prevent crashes
 const formatDateSafe = (dateString, options = {}) => {
   if (!dateString) return '-';
   const d = new Date(dateString);
   return isNaN(d.getTime()) ? '-' : d.toLocaleString(undefined, options);
 };
 
-// Custom Format: 24/5/2025 Monday
 const formatHistoryDate = (dateStr) => {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return '-';
@@ -133,29 +130,22 @@ const formatHistoryDate = (dateStr) => {
   return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${dayName}`;
 };
 
-// --- SMART DURATION CALCULATOR (GLOBAL) ---
 const getSmartDuration = (currentLog, allLogs) => {
-  // 1. Trust DB if valid and > 0.001
   if (currentLog.calculatedHours !== undefined && currentLog.calculatedHours !== null && !isNaN(currentLog.calculatedHours) && currentLog.calculatedHours > 0.001) {
     return Number(currentLog.calculatedHours);
   }
-  // 2. Fallback: Find matching IN
   if (currentLog.action === 'OUT') {
     const outTime = new Date(currentLog.timestamp).getTime();
     if (isNaN(outTime)) return 0;
-
-    // Find closest IN before this OUT
     const match = allLogs.find(l => 
       l.employeeId === currentLog.employeeId && 
       l.action === 'IN' && 
       new Date(l.timestamp).getTime() < outTime
     );
-
     if (match) {
       const inTime = new Date(match.timestamp).getTime();
       if (!isNaN(inTime)) {
         const diffMs = outTime - inTime;
-        // Limit to 24h to avoid matching wrong shifts from days ago
         if (diffMs > 0 && diffMs < 24 * 60 * 60 * 1000) {
            return diffMs / (1000 * 60 * 60);
         }
@@ -165,19 +155,14 @@ const getSmartDuration = (currentLog, allLogs) => {
   return 0;
 };
 
-// --- LIVE CLOCK COMPONENT ---
 const LiveDuration = ({ startTime }) => {
   const [elapsed, setElapsed] = useState(0);
-
   useEffect(() => {
     if (!startTime) return;
     const start = new Date(startTime).getTime();
     if (isNaN(start)) return;
-
     setElapsed(Date.now() - start);
-    const interval = setInterval(() => {
-      setElapsed(Date.now() - start);
-    }, 1000);
+    const interval = setInterval(() => { setElapsed(Date.now() - start); }, 1000);
     return () => clearInterval(interval);
   }, [startTime]);
   
@@ -201,7 +186,6 @@ const LiveDuration = ({ startTime }) => {
   );
 };
 
-// --- PUSHOVER NOTIFICATION SERVICE (GLOBAL) ---
 const sendPushoverNotification = async (title, message) => {
   try {
     const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'pushover');
@@ -209,14 +193,12 @@ const sendPushoverNotification = async (title, message) => {
     if (!settingsSnap.exists()) return;
     const config = settingsSnap.data();
     if (!config.userKey || !config.apiToken || !config.enabled) return;
-
     const formData = new FormData();
     formData.append('user', config.userKey);
     formData.append('token', config.apiToken);
     formData.append('title', title);
     formData.append('message', message);
     formData.append('sound', config.sound || 'cashregister');
-
     await fetch('https://corsproxy.io/?' + encodeURIComponent('https://api.pushover.net/1/messages.json'), { method: 'POST', body: formData });
   } catch (error) { console.error("Pushover Error:", error); }
 };
@@ -224,7 +206,6 @@ const sendPushoverNotification = async (title, message) => {
 const SimpleBarChart = ({ data, labels, color = "#0891b2" }) => {
   const max = Math.max(...data) || 1;
   const isScrollable = data.length > 12;
-
   return (
     <div className={`w-full ${isScrollable ? 'overflow-x-auto pb-4' : ''}`}>
         <div className={`flex items-end justify-between h-40 gap-2 ${isScrollable ? 'min-w-[1000px]' : 'w-full'}`}>
@@ -288,6 +269,25 @@ function useHashRoute() {
   return { route, navigate };
 }
 
+// --- CONFIRMATION MODAL ---
+function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 animate-in fade-in zoom-in duration-200">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2 flex items-center gap-2">
+                <AlertTriangle size={20} className="text-red-500" /> {title}
+            </h3>
+            <p className="text-slate-600 dark:text-slate-300 mb-6 text-sm">{message}</p>
+            <div className="flex gap-3 justify-end">
+                <button onClick={onCancel} className="px-4 py-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-sm font-medium">Cancel</button>
+                <button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 shadow-sm shadow-red-500/30">Delete</button>
+            </div>
+        </div>
+    </div>
+  );
+}
+
 function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
   if (!isOpen) return null;
   return (
@@ -312,13 +312,12 @@ function GeminiModal({ isOpen, onClose, title, content, isLoading }) {
   );
 }
 
-// --- NEW COMPONENT: EMPLOYEE HISTORY MODAL ---
+// --- EMPLOYEE HISTORY MODAL ---
 function EmployeeHistoryModal({ employee, attendance, onClose }) {
   const [editingId, setEditingId] = useState(null);
   const [editTime, setEditTime] = useState('');
   
-  // Filtering States - UPDATED TO RANGE
-  // Default: Current Month
+  // Filtering States
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
@@ -326,6 +325,13 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
   const [startDate, setStartDate] = useState(startOfMonth);
   const [endDate, setEndDate] = useState(endOfMonth);
   const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
+
+  // Manual Entry States
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualEntry, setManualEntry] = useState({ date: '', time: '', type: 'IN' });
+
+  // Delete Modal State
+  const [deleteData, setDeleteData] = useState(null); // { log, isOpen: false }
 
   if (!employee) return null;
 
@@ -337,7 +343,6 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
       const d = new Date(log.timestamp);
       if (isNaN(d.getTime())) return false;
       const logDate = d.toISOString().slice(0, 10);
-      
       return logDate >= startDate && logDate <= endDate;
   });
 
@@ -345,31 +350,30 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
   const logsByDate = useMemo(() => {
     const groups = {};
     empLogs.forEach(log => {
-      const dateKey = new Date(log.timestamp).toLocaleDateString(); // Local format for grouping key
+      const dateKey = new Date(log.timestamp).toLocaleDateString();
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(log);
     });
     return groups;
   }, [empLogs]);
 
-  // Calculate daily stats and check paid status
   const dailyStats = Object.keys(logsByDate).reduce((acc, dateKey) => {
     const logs = logsByDate[dateKey];
+    // Sort logs chronologically within the day
     const sortedLogs = [...logs].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
     
     let hours = 0;
-    let isDayPaid = true; // Assume paid, unless we find an unpaid OUT log
+    let isDayPaid = true; 
     let hasOutLog = false;
 
     sortedLogs.forEach(log => {
         if(log.action === 'OUT') {
             hasOutLog = true;
-            hours += getSmartDuration(log, attendance); // Pass full attendance for accurate smart calculation
+            hours += getSmartDuration(log, attendance); 
             if (!log.isPaid) isDayPaid = false;
         }
     });
     
-    // If no OUT log (only IN), it's technically not "paid" or "unpaid" yet, but for filtering we can treat as open.
     if (!hasOutLog && logs.length > 0) isDayPaid = false;
 
     acc[dateKey] = {
@@ -381,17 +385,13 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
     return acc;
   }, {});
 
-  // Apply Unpaid Filter to the *Days* list
   let visibleDates = Object.keys(dailyStats);
   if (showUnpaidOnly) {
       visibleDates = visibleDates.filter(date => !dailyStats[date].isPaid && dailyStats[date].hours > 0);
   }
 
-  // Sort dates descending
+  // Sort dates descending (Newest date first)
   visibleDates.sort((a,b) => {
-      // Need to parse the date key back to compare. 
-      // Note: LocaleDateString format varies. Ideally we'd use ISO keys, but for display we reused the key.
-      // Let's rely on the first log's timestamp for robust sorting.
       const timeA = new Date(dailyStats[a].logs[0].timestamp).getTime();
       const timeB = new Date(dailyStats[b].logs[0].timestamp).getTime();
       return timeB - timeA;
@@ -416,33 +416,143 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
     } catch (e) { console.error("Update failed", e); alert("Update failed"); }
   };
 
-  const handleDeleteLog = async (logId) => {
-      if(window.confirm("Delete this log?")) {
-          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', logId));
+  const promptDelete = (log) => {
+      setDeleteData(log);
+  };
+
+  const confirmDelete = async () => {
+      if (!deleteData) return;
+      try {
+          // If deleting OUT log with hours, reverse employee stats
+          if (deleteData.action === 'OUT' && deleteData.calculatedHours > 0) {
+              const reverseAmount = deleteData.earnedAmount || 0;
+              const reverseHours = deleteData.calculatedHours || 0;
+              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', deleteData.employeeId), {
+                  balance: increment(-reverseAmount),
+                  totalHours: increment(-reverseHours)
+              });
+          }
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', deleteData.id));
+          setDeleteData(null);
+      } catch (e) {
+          console.error("Delete failed", e);
+          alert("Delete failed: " + e.message);
       }
   };
 
   const toggleDayPaidStatus = async (dateKey) => {
       const dayData = dailyStats[dateKey];
       const newStatus = !dayData.isPaid;
-      
       try {
           const batch = writeBatch(db);
-          // Mark all OUT logs for this day as paid/unpaid
           dayData.logs.filter(l => l.action === 'OUT').forEach(log => {
               const ref = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', log.id);
               batch.update(ref, { isPaid: newStatus });
           });
           await batch.commit();
-      } catch(e) {
-          console.error("Error updating paid status", e);
+      } catch(e) { console.error("Error updating paid status", e); }
+  };
+
+  const openManualForm = (dateStr) => {
+      let defaultDate = new Date().toISOString().slice(0, 10);
+      const dayLogs = dailyStats[dateStr]?.logs;
+      if (dayLogs && dayLogs.length > 0) {
+          try {
+              defaultDate = new Date(dayLogs[0].timestamp).toISOString().slice(0, 10);
+          } catch(e) { /* fallback */ }
       }
+      setManualEntry({ date: defaultDate, time: '09:00', type: 'IN' });
+      setShowManualForm(true);
+  };
+
+  const submitManualEntry = async (e) => {
+      e.preventDefault();
+      const { date, time, type } = manualEntry;
+      if (!date || !time) return;
+
+      const fullTimestamp = new Date(`${date}T${time}`).toISOString();
+      const manualTs = new Date(fullTimestamp).getTime();
+
+      const duplicate = empLogs.find(l => Math.abs(new Date(l.timestamp).getTime() - manualTs) < 60000 && l.action === type);
+      if (duplicate) { alert("Duplicate entry detected nearby."); return; }
+
+      let calculatedHours = 0;
+      let earnedAmount = 0;
+      const batch = writeBatch(db);
+      const newDocRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'));
+
+      if (type === 'OUT') {
+          const matchingIn = empLogs
+              .filter(l => l.action === 'IN' && new Date(l.timestamp).getTime() < manualTs)
+              .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+          
+          if (matchingIn) {
+              const diffMs = manualTs - new Date(matchingIn.timestamp).getTime();
+              if (diffMs > 0 && diffMs < 86400000) {
+                  calculatedHours = diffMs / (1000 * 60 * 60);
+                  earnedAmount = calculatedHours * (parseFloat(employee.hourlyRate) || 0);
+              }
+          }
+      } else if (type === 'IN') {
+          const matchingOut = empLogs
+              .filter(l => l.action === 'OUT' && new Date(l.timestamp).getTime() > manualTs)
+              .sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0];
+          
+          if (matchingOut && (!matchingOut.calculatedHours || matchingOut.calculatedHours === 0)) {
+              const diffMs = new Date(matchingOut.timestamp).getTime() - manualTs;
+              if (diffMs > 0 && diffMs < 86400000) {
+                  const newHours = diffMs / (1000 * 60 * 60);
+                  const newEarned = newHours * (parseFloat(employee.hourlyRate) || 0);
+                  
+                  const outRef = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', matchingOut.id);
+                  batch.update(outRef, { calculatedHours: newHours, earnedAmount: newEarned });
+                  
+                  const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', employee.id);
+                  batch.update(empRef, { 
+                      balance: increment(newEarned),
+                      totalHours: increment(newHours)
+                  });
+              }
+          }
+      }
+
+      batch.set(newDocRef, {
+          employeeId: employee.id,
+          employeeName: employee.name,
+          timestamp: fullTimestamp,
+          action: type,
+          source: 'manual', 
+          calculatedHours,
+          earnedAmount,
+          createdAt: serverTimestamp()
+      });
+
+      if (calculatedHours > 0) {
+          const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', employee.id);
+          batch.update(empRef, {
+              balance: increment(earnedAmount),
+              totalHours: increment(calculatedHours)
+          });
+      }
+
+      // Check if this manual entry is the newest one to update the main status
+      const isNewer = !employee.lastCheckInTime || manualTs > new Date(employee.lastCheckInTime).getTime();
+      if (isNewer) {
+          const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', employee.id);
+          batch.update(empRef, {
+              isCheckedIn: type === 'IN',
+              lastCheckInTime: type === 'IN' ? fullTimestamp : null
+          });
+      }
+
+      await batch.commit();
+      setShowManualForm(false);
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[85vh]">
-        <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-6 flex justify-between items-center text-white shrink-0">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[85vh] relative">
+        <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-6 flex justify-between items-center text-white shrink-0 rounded-t-2xl">
           <div>
             <h2 className="text-2xl font-bold flex items-center gap-2"><FileText size={24} /> {employee.name}</h2>
             <p className="text-cyan-100 text-sm mt-1">Rate: {formatCurrency(employee.hourlyRate)}/hr • ID: {employee.barcode}</p>
@@ -450,31 +560,17 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
           <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-full transition-colors"><X size={24} /></button>
         </div>
         
-        {/* FILTERS TOOLBAR */}
         <div className="bg-slate-100 dark:bg-slate-900 p-3 flex flex-wrap gap-4 items-center border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-500 font-medium">From:</span>
-                <input 
-                    type="date" 
-                    value={startDate} 
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="p-1.5 rounded border border-slate-300 dark:border-slate-600 text-sm dark:bg-slate-800 dark:text-white"
-                />
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="p-1.5 rounded border border-slate-300 dark:border-slate-600 text-sm dark:bg-slate-800 dark:text-white" />
             </div>
             <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-500 font-medium">To:</span>
-                <input 
-                    type="date" 
-                    value={endDate} 
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="p-1.5 rounded border border-slate-300 dark:border-slate-600 text-sm dark:bg-slate-800 dark:text-white"
-                />
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="p-1.5 rounded border border-slate-300 dark:border-slate-600 text-sm dark:bg-slate-800 dark:text-white" />
             </div>
             <div className="h-6 w-px bg-slate-300 dark:bg-slate-700 mx-2 hidden sm:block"></div>
-            <button 
-                onClick={() => setShowUnpaidOnly(!showUnpaidOnly)}
-                className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors ${showUnpaidOnly ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300 font-medium' : 'bg-white text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600'}`}
-            >
+            <button onClick={() => setShowUnpaidOnly(!showUnpaidOnly)} className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors ${showUnpaidOnly ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300 font-medium' : 'bg-white text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600'}`}>
                 <Filter size={14} />
                 {showUnpaidOnly ? 'Showing Unpaid Only' : 'Show All'}
             </button>
@@ -485,33 +581,29 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                 <div className="text-center text-slate-400 py-10 flex flex-col items-center">
                     <CalendarOff size={48} className="mb-4 opacity-50"/>
                     <p>No records found for this period.</p>
+                    <button onClick={() => { setManualEntry({date: new Date().toISOString().slice(0,10), time: '09:00', type: 'IN'}); setShowManualForm(true); }} className="mt-4 text-cyan-600 hover:underline">Add Entry Manually</button>
                 </div>
             ) : (
                 <div className="space-y-6">
                     {visibleDates.map(dateKey => {
                         const stats = dailyStats[dateKey];
-                        // Use the timestamp of the first log to format the header date correctly
                         const headerDateStr = stats.logs.length > 0 ? stats.logs[0].timestamp : null;
                         
                         return (
                         <div key={dateKey} className={`border rounded-xl overflow-hidden ${stats.isPaid ? 'border-green-200 dark:border-green-900/50' : 'border-orange-200 dark:border-orange-900/50'}`}>
                             <div className={`p-3 flex justify-between items-center border-b ${stats.isPaid ? 'bg-green-50 dark:bg-green-900/20 border-green-100' : 'bg-orange-50 dark:bg-orange-900/20 border-orange-100'}`}>
-                                <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                                    {/* Format: 24/5/2025 Monday */}
-                                    {headerDateStr ? formatHistoryDate(headerDateStr) : dateKey}
-                                </span>
+                                <div className="flex items-center gap-4">
+                                    <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                                        {headerDateStr ? formatHistoryDate(headerDateStr) : dateKey}
+                                    </span>
+                                    <button onClick={() => openManualForm(dateKey)} className="text-xs bg-white/50 hover:bg-white text-slate-600 px-2 py-1 rounded border border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600 flex items-center gap-1">
+                                        <Plus size={12}/> Add Missing
+                                    </button>
+                                </div>
                                 <div className="flex gap-4 text-sm items-center">
                                     <span className="text-slate-600 dark:text-slate-400 hidden sm:inline">Total: <strong className="text-slate-800 dark:text-white">{formatDuration(stats.hours)}</strong></span>
-                                    <span className="text-slate-600 dark:text-slate-400">Owed: <strong className="text-slate-800 dark:text-white">{formatCurrency(stats.pay)}</strong></span>
-                                    
-                                    {/* Paid Toggle Button */}
-                                    <button 
-                                        onClick={() => toggleDayPaidStatus(dateKey)}
-                                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold transition-all ${stats.isPaid ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-white border border-orange-300 text-orange-600 hover:bg-orange-100'}`}
-                                        title={stats.isPaid ? "Mark as Unpaid" : "Mark as Paid"}
-                                    >
-                                        {stats.isPaid ? <CheckSquare size={14}/> : <Square size={14}/>}
-                                        {stats.isPaid ? 'PAID' : 'UNPAID'}
+                                    <button onClick={() => toggleDayPaidStatus(dateKey)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold transition-all ${stats.isPaid ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-white border border-orange-300 text-orange-600 hover:bg-orange-100'}`} title={stats.isPaid ? "Mark as Unpaid" : "Mark as Paid"}>
+                                        {stats.isPaid ? <CheckSquare size={14}/> : <Square size={14}/>} {stats.isPaid ? 'PAID' : 'UNPAID'}
                                     </button>
                                 </div>
                             </div>
@@ -523,16 +615,18 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                                     return (
                                         <div key={log.id} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                             <div className="flex items-center gap-4">
-                                                <span className={`px-2 py-1 rounded text-xs font-bold w-12 text-center ${log.action === 'IN' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                    {log.action}
-                                                </span>
+                                                <div className="flex flex-col items-center">
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold w-12 text-center mb-1 ${log.action === 'IN' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                        {log.action}
+                                                    </span>
+                                                    {log.source === 'manual' && (
+                                                        <span className="text-[10px] text-orange-600 border border-orange-200 bg-orange-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5" title="Manually Added">
+                                                            <Tag size={8}/>
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 {isEditing ? (
-                                                    <input 
-                                                        type="datetime-local" 
-                                                        value={editTime}
-                                                        onChange={e => setEditTime(e.target.value)}
-                                                        className="border rounded p-1 text-sm dark:bg-slate-600 dark:text-white"
-                                                    />
+                                                    <input type="datetime-local" value={editTime} onChange={e => setEditTime(e.target.value)} className="border rounded p-1 text-sm dark:bg-slate-600 dark:text-white" />
                                                 ) : (
                                                     <span className="text-slate-700 dark:text-slate-300 font-mono text-sm">
                                                         {new Date(log.timestamp).toLocaleTimeString()}
@@ -548,7 +642,7 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                                                 ) : (
                                                     <button onClick={() => handleEditClick(log)} className="p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded"><Edit size={14}/></button>
                                                 )}
-                                                <button onClick={() => handleDeleteLog(log.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                                <button onClick={() => promptDelete(log)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
                                             </div>
                                         </div>
                                     );
@@ -559,11 +653,51 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                 </div>
             )}
         </div>
+
+        {showManualForm && (
+            <div className="absolute inset-0 z-50 bg-white/95 dark:bg-slate-900/95 flex flex-col items-center justify-center rounded-2xl animate-in fade-in zoom-in duration-200">
+                <div className="w-full max-w-sm p-6 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Add Missing Entry</h3>
+                    <form onSubmit={submitManualEntry} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Date</label>
+                            <input type="date" required value={manualEntry.date} onChange={e => setManualEntry({...manualEntry, date: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white"/>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Time</label>
+                                <input type="time" required value={manualEntry.time} onChange={e => setManualEntry({...manualEntry, time: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white"/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Type</label>
+                                <select value={manualEntry.type} onChange={e => setManualEntry({...manualEntry, type: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white">
+                                    <option value="IN">Check In</option>
+                                    <option value="OUT">Check Out</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                            <button type="button" onClick={() => setShowManualForm(false)} className="flex-1 py-3 text-slate-500 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                            <button type="submit" className="flex-1 py-3 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-700">Add Entry</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        )}
+
+        <ConfirmModal 
+            isOpen={!!deleteData}
+            title="Delete Log Entry"
+            message="Are you sure you want to delete this entry? If this was a manual entry that added hours, the employee's balance and hours will be reversed."
+            onConfirm={confirmDelete}
+            onCancel={() => setDeleteData(null)}
+        />
       </div>
     </div>
   );
 }
 
+// --- QrCodeDisplayModal ---
 function QrCodeDisplayModal({ employee, onClose }) {
     if (!employee) return null;
     return (
@@ -582,6 +716,7 @@ function QrCodeDisplayModal({ employee, onClose }) {
     );
 }
 
+// --- MAIN APP COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -642,7 +777,6 @@ function AdminLogin({ navigate }) {
     
     try {
         let currentPassword = ADMIN_CONFIG.password;
-        // Fetch dynamic password if it exists
         const securityDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'security'));
         if (securityDoc.exists() && securityDoc.data().password) {
             currentPassword = securityDoc.data().password;
@@ -747,8 +881,22 @@ function ScannerMode({ user }) {
           }
       }
 
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), { employeeId: employee.id, employeeName: employee.name, timestamp, action: isCheckIn ? 'IN' : 'OUT', calculatedHours: isCheckIn ? 0 : hoursWorked, earnedAmount: isCheckIn ? 0 : earnedAmount });
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', employee.id), { isCheckedIn: isCheckIn, lastCheckInTime: isCheckIn ? timestamp : null, balance: (parseFloat(employee.balance) || 0) + earnedAmount, totalHours: (parseFloat(employee.totalHours) || 0) + hoursWorked });
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), { 
+          employeeId: employee.id, 
+          employeeName: employee.name, 
+          timestamp, 
+          action: isCheckIn ? 'IN' : 'OUT', 
+          source: 'scan', 
+          calculatedHours: isCheckIn ? 0 : hoursWorked, 
+          earnedAmount: isCheckIn ? 0 : earnedAmount 
+      });
+      
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', employee.id), { 
+          isCheckedIn: isCheckIn, 
+          lastCheckInTime: isCheckIn ? timestamp : null, 
+          balance: (parseFloat(employee.balance) || 0) + earnedAmount, 
+          totalHours: (parseFloat(employee.totalHours) || 0) + hoursWorked 
+      });
 
       showFeedback('success', feedbackMsg, employee);
       sendPushoverNotification("Aqua Scan", `${employee.name} ${feedbackMsg}`);
@@ -823,12 +971,9 @@ function SettingsTab() {
   const [config, setConfig] = useState({ userKey: '', apiToken: '', enabled: false, sound: 'cashregister' });
   const [isSaved, setIsSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Password State
   const [passForm, setPassForm] = useState({ newPass: '', confirmPass: '' });
   const [isPassSaved, setIsPassSaved] = useState(false);
 
-  // Load from DB instead of local storage
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -837,11 +982,7 @@ function SettingsTab() {
         if (docSnap.exists()) {
           setConfig(docSnap.data());
         }
-      } catch (e) {
-        console.error("Error fetching settings:", e);
-      } finally {
-        setIsLoading(false);
-      }
+      } catch (e) { console.error("Error fetching settings:", e); } finally { setIsLoading(false); }
     };
     fetchSettings();
   }, []);
@@ -852,47 +993,31 @@ function SettingsTab() {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'pushover'), config);
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
-    } catch (e) {
-      console.error("Error saving settings:", e);
-      alert("Failed to save settings.");
-    }
+    } catch (e) { alert("Failed to save settings."); }
   };
 
   const handleUpdatePassword = async (e) => {
       e.preventDefault();
-      if (passForm.newPass !== passForm.confirmPass) {
-          alert("Passwords do not match!");
-          return;
-      }
+      if (passForm.newPass !== passForm.confirmPass) { alert("Passwords do not match!"); return; }
       if (!passForm.newPass) return;
-
       try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'security'), {
-              password: passForm.newPass
-          });
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'security'), { password: passForm.newPass });
           setPassForm({ newPass: '', confirmPass: '' });
           setIsPassSaved(true);
           setTimeout(() => setIsPassSaved(false), 2000);
-      } catch (e) {
-          console.error("Error updating password:", e);
-          alert("Failed to update password");
-      }
+      } catch (e) { alert("Failed to update password"); }
   };
 
-  const handleTest = () => { sendPushoverNotification("Aqua Test", "This is a test message from your Admin Dashboard."); };
-  
   if (isLoading) return <div className="p-8 text-center text-slate-500">Loading settings...</div>;
 
   return (
     <div className="max-w-xl mx-auto space-y-8">
-        {/* Pushover Settings */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm">
             <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Pushover Notifications</h2>
             <form onSubmit={handleSave} className="space-y-4">
                 <div className="flex items-center gap-2 mb-4"><input type="checkbox" checked={config.enabled} onChange={e=>setConfig({...config, enabled: e.target.checked})} /> <span>Enable Notifications</span></div>
                 <input className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="User Key" value={config.userKey} onChange={e=>setConfig({...config, userKey: e.target.value})} />
                 <input className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" type="password" placeholder="API Token" value={config.apiToken} onChange={e=>setConfig({...config, apiToken: e.target.value})} />
-                
                 <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Notification Sound</label>
                     <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={config.sound} onChange={e=>setConfig({...config, sound: e.target.value})}>
@@ -920,40 +1045,15 @@ function SettingsTab() {
                         <option value="none">None (Silent)</option>
                     </select>
                 </div>
-
                 <button className="bg-cyan-600 text-white px-4 py-2 rounded w-full hover:bg-cyan-700 transition-colors">{isSaved ? 'Saved!' : 'Save Notifications'}</button>
             </form>
         </div>
-
-        {/* Security Settings */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border-l-4 border-orange-500">
-            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2">
-                <Lock size={20} className="text-orange-500"/> Admin Security
-            </h2>
+            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Lock size={20} className="text-orange-500"/> Admin Security</h2>
             <form onSubmit={handleUpdatePassword} className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">New Password</label>
-                    <input 
-                        type="password"
-                        className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                        value={passForm.newPass}
-                        onChange={e => setPassForm({...passForm, newPass: e.target.value})}
-                        placeholder="Enter new password"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Confirm Password</label>
-                    <input 
-                        type="password"
-                        className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                        value={passForm.confirmPass}
-                        onChange={e => setPassForm({...passForm, confirmPass: e.target.value})}
-                        placeholder="Confirm new password"
-                    />
-                </div>
-                <button type="submit" className="bg-orange-600 text-white px-4 py-2 rounded w-full hover:bg-orange-700 transition-colors font-medium">
-                    {isPassSaved ? 'Password Updated!' : 'Update Password'}
-                </button>
+                <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">New Password</label><input type="password" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={passForm.newPass} onChange={e => setPassForm({...passForm, newPass: e.target.value})} placeholder="Enter new password" /></div>
+                <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Confirm Password</label><input type="password" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={passForm.confirmPass} onChange={e => setPassForm({...passForm, confirmPass: e.target.value})} placeholder="Confirm new password" /></div>
+                <button type="submit" className="bg-orange-600 text-white px-4 py-2 rounded w-full hover:bg-orange-700 transition-colors font-medium">{isPassSaved ? 'Password Updated!' : 'Update Password'}</button>
             </form>
         </div>
     </div>
@@ -1027,9 +1127,7 @@ function AnalyticsTab({ employees, attendance }) {
 
     const avgShift = outs.length ? (totalH/outs.length) : 0;
     
-    // Chart Configuration
     let chartData, labels;
-
     if (range === 'Day') {
         chartData = new Array(24).fill(0);
         labels = Array.from({length: 24}, (_, i) => `${i.toString().padStart(2,'0')}:00`);
@@ -1039,7 +1137,7 @@ function AnalyticsTab({ employees, attendance }) {
     } else if (range === 'Week') {
         chartData = [0,0,0,0,0,0,0];
         labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    } else { // Year
+    } else { 
         chartData = new Array(12).fill(0);
         labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     }
@@ -1048,19 +1146,10 @@ function AnalyticsTab({ employees, attendance }) {
         const d = new Date(log.timestamp);
         if (isNaN(d.getTime())) return;
         const dur = getSmartDuration(log, attendance);
-        
-        if (range === 'Day') {
-             const hour = d.getHours();
-             chartData[hour] += dur;
-        } else if (range === 'Week') { 
-             const day = d.getDay(); 
-             chartData[day===0?6:day-1] += dur; 
-        } else if (range === 'Month') { 
-             const wk = Math.min(4, Math.floor((d.getDate()-1)/7)); 
-             chartData[wk] += dur; 
-        } else { 
-             chartData[d.getMonth()] += dur; 
-        }
+        if (range === 'Day') { const hour = d.getHours(); chartData[hour] += dur; }
+        else if (range === 'Week') { const day = d.getDay(); chartData[day===0?6:day-1] += dur; }
+        else if (range === 'Month') { const wk = Math.min(4, Math.floor((d.getDate()-1)/7)); chartData[wk] += dur; }
+        else { chartData[d.getMonth()] += dur; }
     });
 
     let displayTitle = "";
@@ -1240,11 +1329,23 @@ function EmployeesTab({ employees, attendance, user }) {
 
 // --- Attendance Logs ---
 function AttendanceTab({ attendance }) {
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this log entry? This cannot be undone.')) {
-      try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', id)); } 
-      catch (error) { console.error("Error deleting log:", error); window.alert("Failed to delete log."); }
-    }
+  const [deleteData, setDeleteData] = useState(null);
+
+  const confirmDelete = async () => {
+    if (!deleteData) return;
+    try { 
+        if (deleteData.action === 'OUT' && deleteData.calculatedHours > 0) {
+            const reverseAmount = deleteData.earnedAmount || 0;
+            const reverseHours = deleteData.calculatedHours || 0;
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', deleteData.employeeId), {
+                balance: increment(-reverseAmount),
+                totalHours: increment(-reverseHours)
+            });
+        }
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', deleteData.id));
+        setDeleteData(null);
+    } 
+    catch (error) { console.error("Error deleting log:", error); alert("Failed to delete log."); }
   };
 
   const getSmartDuration = (currentLog, allLogs) => {
@@ -1263,6 +1364,9 @@ function AttendanceTab({ attendance }) {
     return 0;
   };
 
+  // Client-side sort to fix optimistic updates appearing at top
+  const sortedAttendance = [...attendance].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
       <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50"><h3 className="font-semibold text-slate-800 dark:text-white">Attendance Log</h3></div>
@@ -1270,22 +1374,38 @@ function AttendanceTab({ attendance }) {
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs sticky top-0"><tr><th className="px-6 py-3">Time</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Action</th><th className="px-6 py-3">Duration</th><th className="px-6 py-3 text-right">Manage</th></tr></thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-            {attendance.map(log => {
+            {sortedAttendance.map(log => {
               const duration = getSmartDuration(log, attendance);
               return (
               <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                 <td className="px-6 py-3 text-slate-500 dark:text-slate-400">{formatDateSafe(log.timestamp)}</td>
                 <td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{log.employeeName}</td>
-                <td className="px-6 py-3"><span className={`px-2 py-0.5 rounded text-xs font-bold ${log.action === 'IN' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>{log.action}</span></td>
+                <td className="px-6 py-3">
+                    <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${log.action === 'IN' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>{log.action}</span>
+                        {log.source === 'manual' && (
+                            <span className="text-[10px] text-orange-600 border border-orange-200 bg-orange-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5" title="Manually Added">
+                                <Tag size={8}/>
+                            </span>
+                        )}
+                    </div>
+                </td>
                 <td className="px-6 py-3 text-slate-600 dark:text-slate-300">
                   {log.action === 'OUT' && duration > 0 ? (<div className="flex flex-col"><span className="font-medium text-slate-800 dark:text-slate-200">{formatDuration(duration)}</span><span className="text-xs text-slate-400">({Number(duration).toFixed(2)} hrs)</span></div>) : (<span className="text-slate-300 dark:text-slate-600">-</span>)}
                 </td>
-                <td className="px-6 py-3 text-right"><button onClick={() => handleDelete(log.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Delete Entry"><Trash2 size={16} /></button></td>
+                <td className="px-6 py-3 text-right"><button onClick={() => setDeleteData(log)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Delete Entry"><Trash2 size={16} /></button></td>
               </tr>
             )})}
           </tbody>
         </table>
       </div>
+      <ConfirmModal 
+        isOpen={!!deleteData}
+        title="Delete Entry"
+        message="Are you sure you want to delete this log? If this is an OUT log, any calculations will be reversed."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteData(null)}
+      />
     </div>
   );
 }
