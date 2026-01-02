@@ -66,10 +66,15 @@ import {
   CheckSquare, 
   Square, 
   Tag, 
-  Briefcase,
-  RefreshCw,
-  Check,
-  Send
+  Briefcase, 
+  RefreshCw, 
+  Check, 
+  Send, 
+  CreditCard, 
+  Banknote, 
+  ToggleLeft, 
+  ToggleRight, 
+  ClipboardList
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -1046,6 +1051,77 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
     return () => { empUnsub(); attUnsub(); deptUnsub(); };
   }, [user?.uid]);
 
+  // --- AUTOMATIC CLOCK IN/OUT & ABSENCE CHECK LOGIC ---
+  useEffect(() => {
+      // Logic: Run this check when employees/attendance load.
+      // Filter: Employees with 'autoClock' = true
+      // Action: Check YESTERDAY. If no logs exist, create IN/OUT logs.
+      if (employees.length > 0 && attendance.length > 0) {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yStr = yesterday.toISOString().slice(0, 10);
+          
+          const batch = writeBatch(db);
+          let hasUpdates = false;
+
+          employees.forEach(emp => {
+              if (emp.status !== 'Active') return;
+
+              // Check if logs exist for yesterday
+              const hasAttendance = attendance.some(l => l.employeeId === emp.id && l.timestamp.startsWith(yStr));
+              
+              if (!hasAttendance) {
+                  // AUTO CLOCK LOGIC
+                  if (emp.autoClock) {
+                      const inTimeStr = emp.autoClockInTime || '09:00';
+                      const outTimeStr = emp.autoClockOutTime || '17:00';
+                      
+                      const inTs = new Date(`${yStr}T${inTimeStr}`).toISOString();
+                      const outTs = new Date(`${yStr}T${outTimeStr}`).toISOString();
+                      
+                      // Calculate hours
+                      const start = new Date(inTs).getTime();
+                      const end = new Date(outTs).getTime();
+                      let hours = 0;
+                      if (end > start) hours = (end - start) / (1000 * 60 * 60);
+                      
+                      const earned = hours * (parseFloat(emp.hourlyRate) || 0);
+
+                      // Add IN Log
+                      const inRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'));
+                      batch.set(inRef, {
+                          employeeId: emp.id, employeeName: emp.name, timestamp: inTs, action: 'IN', source: 'auto',
+                          createdAt: serverTimestamp()
+                      });
+
+                      // Add OUT Log
+                      const outRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'));
+                      batch.set(outRef, {
+                          employeeId: emp.id, employeeName: emp.name, timestamp: outTs, action: 'OUT', source: 'auto',
+                          calculatedHours: hours, earnedAmount: earned, createdAt: serverTimestamp()
+                      });
+
+                      // Update Employee Stats
+                      const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id);
+                      batch.update(empRef, {
+                          balance: increment(earned),
+                          totalHours: increment(hours)
+                      });
+                      hasUpdates = true;
+                  } 
+                  // ABSENCE LOGIC (Only if autoAbsence is enabled and NOT autoClock)
+                  else if (emp.autoAbsence !== false) {
+                        // Check if absence already exists is handled in AbsencesTab mostly, but we can do a quick check if needed.
+                        // However, strictly sticking to user request: "toggle for an employee auto check in/check out".
+                        // The existing absence logic in AbsencesTab will handle the rest if they don't have attendance.
+                  }
+              }
+          });
+
+          if (hasUpdates) batch.commit().catch(console.error);
+      }
+  }, [employees.length, attendance.length]); // Dependencies ensure it runs when data loads
+
   const MenuItem = ({ id, icon: Icon, label }) => ( <button onClick={() => setActiveTab(id)} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === id ? 'bg-cyan-500/10 text-cyan-500 dark:bg-cyan-600/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400'}`}><Icon size={20} /><span className="font-medium">{label}</span></button> );
 
   return (
@@ -1497,7 +1573,18 @@ function OverviewTab({ employees, attendance, user }) {
 // --- Employees Management ---
 function EmployeesTab({ employees, attendance, user, departments }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({ name: '', barcode: '', hourlyRate: 0, status: 'Active', department: 'Operations' });
+  const [formData, setFormData] = useState({ 
+      name: '', 
+      barcode: '', 
+      hourlyRate: 0, 
+      status: 'Active', 
+      department: 'Operations',
+      employmentType: 'Full Time',
+      autoAbsence: true,
+      autoClock: false,
+      autoClockInTime: '09:00',
+      autoClockOutTime: '17:00'
+  });
   const [search, setSearch] = useState('');
   const [showBarcode, setShowBarcode] = useState(null); 
   const [geminiLoading, setGeminiLoading] = useState(false);
@@ -1509,17 +1596,21 @@ function EmployeesTab({ employees, attendance, user, departments }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (formData.id) {
-        const ref = doc(db, 'artifacts', appId, 'public', 'data', 'employees', formData.id);
-        const finalFormData = { ...formData };
-        if (!finalFormData.barcode || finalFormData.barcode === 0) finalFormData.barcode = generateUniqueId(employees);
+      const finalFormData = { ...formData };
+      if (!finalFormData.barcode || finalFormData.barcode === 0) finalFormData.barcode = generateUniqueId(employees);
+
+      if (finalFormData.id) {
+        const ref = doc(db, 'artifacts', appId, 'public', 'data', 'employees', finalFormData.id);
         await updateDoc(ref, finalFormData);
       } else {
-        const newBarcode = formData.barcode || generateUniqueId(employees);
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), { ...formData, barcode: newBarcode, balance: 0, totalHours: 0, isCheckedIn: false, hourlyRate: Number(formData.hourlyRate) });
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), { ...finalFormData, balance: 0, totalHours: 0, isCheckedIn: false, hourlyRate: Number(finalFormData.hourlyRate) });
       }
       setIsEditing(false);
-      setFormData({ name: '', barcode: '', hourlyRate: 0, status: 'Active', department: 'Operations' });
+      // Reset form
+      setFormData({ 
+          name: '', barcode: '', hourlyRate: 0, status: 'Active', department: 'Operations', employmentType: 'Full Time', 
+          autoAbsence: true, autoClock: false, autoClockInTime: '09:00', autoClockOutTime: '17:00'
+      });
     } catch(err) { console.error(err); window.alert(err.message); }
   };
 
@@ -1551,25 +1642,80 @@ function EmployeesTab({ employees, attendance, user, departments }) {
         />
       )}
 
-      <div className="flex flex-col sm:flex-row justify-between gap-4"><div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18} /><input type="text" placeholder="Search by name or code..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg w-full sm:w-64 text-slate-800 dark:text-white" /></div><button onClick={() => { setFormData({ name: '', barcode: '', hourlyRate: 0, status: 'Active', department: departments?.[0] || 'Operations' }); setIsEditing(true); }} className="bg-cyan-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-cyan-700"><Plus size={18} /> Add Employee</button></div>
+      <div className="flex flex-col sm:flex-row justify-between gap-4"><div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18} /><input type="text" placeholder="Search by name or code..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg w-full sm:w-64 text-slate-800 dark:text-white" /></div><button onClick={() => { setFormData({ name: '', barcode: '', hourlyRate: 0, status: 'Active', department: departments?.[0] || 'Operations', employmentType: 'Full Time', autoAbsence: true, autoClock: false, autoClockInTime: '09:00', autoClockOutTime: '17:00' }); setIsEditing(true); }} className="bg-cyan-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-cyan-700"><Plus size={18} /> Add Employee</button></div>
       {isEditing && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">{formData.id ? 'Edit' : 'New'} Employee</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Name</label><input required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Name</label>
+                    <input required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} />
+                  </div>
               
-              <div>
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</label>
-                  <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })}>
-                      {departments?.map(d => (
-                          <option key={d} value={d}>{d}</option>
-                      ))}
-                  </select>
+                  <div>
+                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</label>
+                      <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })}>
+                          {departments?.map(d => (
+                              <option key={d} value={d}>{d}</option>
+                          ))}
+                      </select>
+                  </div>
+                  <div>
+                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Employment Type</label>
+                      <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.employmentType} onChange={e => setFormData({ ...formData, employmentType: e.target.value })}>
+                          <option value="Full Time">Full Time</option>
+                          <option value="Part Time">Part Time</option>
+                          <option value="Contract">Contract</option>
+                          <option value="Casual">Casual</option>
+                      </select>
+                  </div>
               </div>
 
               <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">QR Code ID (5 Digits)</label><input required type="number" className="w-full p-2 border rounded font-mono bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.barcode} onChange={e => setFormData({ ...formData, barcode: e.target.value.slice(0, 5) })} placeholder="e.g. 10001" /><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">This 5-digit code is the key for the scanner. It is encoded directly in the QR code.</p></div>
               <div className="grid grid-cols-2 gap-4"><div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Rate (€)</label><input required type="number" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div><div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</label><select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div></div>
+              
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-700 space-y-4">
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                          <div className="relative">
+                              <input type="checkbox" className="sr-only peer" checked={formData.autoClock} onChange={e => setFormData({...formData, autoClock: e.target.checked})} />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 dark:peer-focus:ring-cyan-800 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-cyan-600"></div>
+                          </div>
+                          <div>
+                              <span className="text-sm font-bold text-slate-800 dark:text-white">Auto-Clock Attendance</span>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">For off-site employees (no scan required)</p>
+                          </div>
+                      </label>
+                      {formData.autoClock && (
+                          <div className="flex gap-4 mt-3 pl-14">
+                              <div>
+                                  <label className="text-xs font-medium text-slate-500 block mb-1">Start Time</label>
+                                  <input type="time" className="p-1 border rounded text-sm dark:bg-slate-800 dark:border-slate-600 dark:text-white" value={formData.autoClockInTime} onChange={e => setFormData({...formData, autoClockInTime: e.target.value})} />
+                              </div>
+                              <div>
+                                  <label className="text-xs font-medium text-slate-500 block mb-1">End Time</label>
+                                  <input type="time" className="p-1 border rounded text-sm dark:bg-slate-800 dark:border-slate-600 dark:text-white" value={formData.autoClockOutTime} onChange={e => setFormData({...formData, autoClockOutTime: e.target.value})} />
+                              </div>
+                          </div>
+                      )}
+                  </div>
+
+                  {!formData.autoClock && (
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-lg">
+                          <div className="relative">
+                              <input type="checkbox" className="sr-only peer" checked={formData.autoAbsence !== false} onChange={e => setFormData({...formData, autoAbsence: e.target.checked})} />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 dark:peer-focus:ring-cyan-800 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-cyan-600"></div>
+                          </div>
+                          <div>
+                              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Auto-create Absences</span>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">Mark unexcused absence if no check-in</p>
+                          </div>
+                      </label>
+                  )}
+              </div>
+
               <div className="flex justify-end gap-3 mt-6"><button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 rounded">Cancel</button><button type="submit" className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700">Save</button></div>
             </form>
           </div>
@@ -1578,8 +1724,20 @@ function EmployeesTab({ employees, attendance, user, departments }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{filtered.map(emp => (<div key={emp.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center group hover:border-cyan-300 transition-colors">
         <div>
             <h4 className="font-bold text-lg text-slate-800 dark:text-white">{emp.name}</h4>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
                 <span className="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{emp.department || 'Operations'}</span>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded border ${emp.employmentType === 'Part Time' ? 'bg-orange-50 border-orange-100 text-orange-600 dark:bg-orange-900/20 dark:border-orange-900/50 dark:text-orange-400' : 'bg-blue-50 border-blue-100 text-blue-600 dark:bg-blue-900/20 dark:border-blue-900/50 dark:text-blue-400'}`}>
+                    {emp.employmentType || 'Full Time'}
+                </span>
+                {emp.autoClock ? (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-900/20 dark:border-purple-900/50 dark:text-purple-400 flex items-center gap-1">
+                        <RefreshCw size={10}/> Auto-Clock
+                    </span>
+                ) : emp.autoAbsence === false && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 flex items-center gap-1">
+                        <CalendarOff size={10}/> No Auto-Absence
+                    </span>
+                )}
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400">ID: {emp.barcode}</p>
             <p className="text-sm text-slate-500 dark:text-slate-400">Bal: {formatCurrency(emp.balance || 0)}</p>
@@ -1589,7 +1747,7 @@ function EmployeesTab({ employees, attendance, user, departments }) {
             <button onClick={() => setHistoryEmp(emp)} className="p-2 bg-blue-50 text-blue-600 rounded-lg dark:bg-blue-900/30 dark:text-blue-400" title="View History"><FileText size={16} /></button>
             {emp.barcode && (<button onClick={() => setShowBarcode(emp)} className="p-2 bg-green-50 text-green-600 rounded-lg dark:bg-green-900/30 dark:text-green-400" title="Generate QR Code"><QrCode size={16} /></button>)}
             <button onClick={() => handleGeminiAnalysis(emp)} className="p-2 bg-indigo-50 text-indigo-600 rounded-lg dark:bg-indigo-900/30 dark:text-indigo-400"><Sparkles size={16} /></button>
-            <button onClick={() => { setFormData(emp); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg text-slate-500 dark:bg-slate-700 dark:text-slate-400"><Edit size={16} /></button>
+            <button onClick={() => { setFormData({...emp, autoAbsence: emp.autoAbsence === undefined ? true : emp.autoAbsence, autoClock: emp.autoClock || false, autoClockInTime: emp.autoClockInTime || '09:00', autoClockOutTime: emp.autoClockOutTime || '17:00' }); setIsEditing(true); }} className="p-2 bg-slate-100 rounded-lg text-slate-500 dark:bg-slate-700 dark:text-slate-400"><Edit size={16} /></button>
             <button onClick={() => { if(window.confirm('Delete?')) deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id)) }} className="p-2 bg-slate-100 text-red-600 rounded-lg dark:bg-slate-700 dark:text-red-400"><Trash2 size={16} /></button>
         </div></div>))}</div>
     </div>
@@ -1647,6 +1805,11 @@ function AttendanceTab({ attendance }) {
                                 <Tag size={8}/>
                             </span>
                         )}
+                        {log.source === 'auto' && (
+                            <span className="text-[10px] text-purple-600 border border-purple-200 bg-purple-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5" title="Auto Generated">
+                                <RefreshCw size={8}/>
+                            </span>
+                        )}
                     </div>
                 </td>
                 <td className="px-6 py-3 text-slate-600 dark:text-slate-300">
@@ -1671,6 +1834,27 @@ function AttendanceTab({ attendance }) {
 
 // --- Payroll System ---
 function PayrollTab({ employees, attendance }) {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  
+  const [startDate, setStartDate] = useState(startOfMonth);
+  const [endDate, setEndDate] = useState(endOfMonth);
+  
+  // State for adding/editing payments
+  const [isPaying, setIsPaying] = useState(false);
+  const [editingPaymentId, setEditingPaymentId] = useState(null); // ID of payment being edited
+  const [originalPaymentAmount, setOriginalPaymentAmount] = useState(0); // To calc difference
+  const [payForm, setPayForm] = useState({ amount: 0, note: '', method: 'Bank', date: '' });
+  const [selectedEmp, setSelectedEmp] = useState(null);
+  
+  const [payments, setPayments] = useState([]);
+  const [deletePaymentData, setDeletePaymentData] = useState(null);
+
+  // Edit Balance State
+  const [editingBalanceId, setEditingBalanceId] = useState(null);
+  const [tempBalance, setTempBalance] = useState('');
+
   const stats = useMemo(() => {
     const s = {};
     (employees || []).forEach(e => s[e.id] = { earned: 0, hours: 0 });
@@ -1689,45 +1873,159 @@ function PayrollTab({ employees, attendance }) {
     return s;
   }, [employees, attendance]);
 
-  const handlePayment = async (e, selectedEmp, amount, note, setIsPaying) => {
+  const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     if (!selectedEmp) return;
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payments'), { 
-        employeeId: selectedEmp.id, 
-        employeeName: selectedEmp.name, 
-        amount: parseFloat(amount), 
-        date: new Date().toISOString(), 
-        note: note 
-    });
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', selectedEmp.id), { 
-        balance: (selectedEmp.balance || 0) - parseFloat(amount) 
-    });
+
+    try {
+        if (editingPaymentId) {
+            // EDITING EXISTING PAYMENT
+            // Logic: Balance = Balance + OldAmount - NewAmount
+            // Example: Owed 500. Paid 100 -> Bal 400.
+            // Edit Pay to 150. (Diff +50). Bal should be 350.
+            // Calculation: 400 + 100 - 150 = 350. Correct.
+            
+            const newAmount = parseFloat(payForm.amount);
+            const diff = originalPaymentAmount - newAmount;
+
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', editingPaymentId), {
+                amount: newAmount,
+                note: payForm.note,
+                method: payForm.method,
+                date: payForm.date // Allow date edit
+            });
+
+            if (diff !== 0) {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', selectedEmp.id), {
+                    balance: increment(diff)
+                });
+            }
+        } else {
+            // CREATING NEW PAYMENT
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payments'), { 
+                employeeId: selectedEmp.id, 
+                employeeName: selectedEmp.name, 
+                amount: parseFloat(payForm.amount), 
+                date: new Date().toISOString(), 
+                note: payForm.note,
+                method: payForm.method
+            });
+            // Decrease balance (Owed amount decreases)
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', selectedEmp.id), { 
+                balance: increment(-parseFloat(payForm.amount))
+            });
+        }
+    } catch(e) { console.error("Payment Error", e); alert("Error processing payment"); }
+    
     setIsPaying(false);
+    setEditingPaymentId(null);
+  };
+  
+  const handleDeletePayment = async () => {
+    if(!deletePaymentData) return;
+    try {
+        // Reverse balance (Add amount back to owed)
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', deletePaymentData.employeeId), {
+            balance: increment(deletePaymentData.amount)
+        });
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', deletePaymentData.id));
+        setDeletePaymentData(null);
+    } catch(e) { console.error("Error deleting payment", e); }
   };
 
-  const [isPaying, setIsPaying] = useState(false);
-  const [payForm, setPayForm] = useState({ amount: 0, note: '' });
-  const [selectedEmp, setSelectedEmp] = useState(null);
-  const [payments, setPayments] = useState([]);
+  const openEditPayment = (pay) => {
+      const emp = employees.find(e => e.id === pay.employeeId);
+      if (!emp) return; // Should handle orphaned records gracefully but simple for now
+      
+      setSelectedEmp(emp);
+      setEditingPaymentId(pay.id);
+      setOriginalPaymentAmount(pay.amount);
+      setPayForm({
+          amount: pay.amount,
+          note: pay.note || '',
+          method: pay.method || 'Bank',
+          date: pay.date // Keep original ISO string
+      });
+      setIsPaying(true);
+  };
+
+  const handleSaveBalance = async (empId) => {
+      const val = parseFloat(tempBalance);
+      if (isNaN(val)) return;
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', empId), { balance: val });
+      setEditingBalanceId(null);
+  };
+
+  const handleExportSummary = () => {
+      const headers = ['Employee Name', 'Department', 'Rate', 'Employment Type', 'Total Hours (Loaded Period)', 'Earnings (Loaded Period)', 'Current Owed Balance'];
+      const rows = employees.map(e => [
+          e.name,
+          e.department || 'N/A',
+          e.hourlyRate,
+          e.employmentType || 'Full Time',
+          stats[e.id]?.hours?.toFixed(2) || '0.00',
+          stats[e.id]?.earned?.toFixed(2) || '0.00',
+          e.balance?.toFixed(2) || '0.00'
+      ]);
+      downloadCSV(headers, rows, 'payroll_summary.csv');
+  };
+
+  const handleExportHistory = () => {
+      const headers = ['Date', 'Employee Name', 'Amount', 'Method', 'Notes'];
+      const rows = filteredPayments.map(p => [
+          formatDateSafe(p.date),
+          p.employeeName,
+          p.amount,
+          p.method,
+          p.note ? `"${p.note.replace(/"/g, '""')}"` : ''
+      ]);
+      downloadCSV(headers, rows, 'payment_history.csv');
+  };
+
+  const downloadCSV = (headers, rows, filename) => {
+      const csvContent = [
+          headers.join(','),
+          ...rows.map(row => row.join(','))
+      ].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
 
   useEffect(() => {
-    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'payments'), orderBy('date', 'desc'), limit(100));
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'payments'), orderBy('date', 'desc'), limit(500));
     const unsub = onSnapshot(q, (snap) => setPayments(snap.docs.map(d => ({id: d.id, ...d.data()}))));
     return () => unsub();
   }, []);
+
+  const filteredPayments = payments.filter(p => {
+      const d = p.date.slice(0, 10);
+      return d >= startDate && d <= endDate;
+  });
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700">
-            <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Balances (Based on Logs)</h3>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-slate-800 dark:text-white">Balances & Period Earnings</h3>
+                <button onClick={handleExportSummary} className="flex items-center gap-1 text-sm bg-cyan-50 text-cyan-600 px-3 py-1.5 rounded hover:bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-400 dark:hover:bg-cyan-900/50">
+                    <Download size={14} /> Export CSV
+                </button>
+            </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500">
                         <tr>
                             <th className="p-2">Employee</th>
                             <th className="p-2">Total Time</th>
-                            <th className="p-2">Owed</th>
+                            <th className="p-2">Log Earnings</th>
+                            <th className="p-2">Owed Balance</th>
                             <th className="p-2"></th>
                         </tr>
                     </thead>
@@ -1738,12 +2036,34 @@ function PayrollTab({ employees, attendance }) {
                                 <td className="p-2 text-slate-500 dark:text-slate-400">
                                     {formatDuration(stats[emp.id]?.hours || 0)}
                                 </td>
-                                <td className="p-2 font-bold text-green-600">
+                                <td className="p-2 text-slate-500 dark:text-slate-400">
                                     {formatCurrency(stats[emp.id]?.earned)}
+                                </td>
+                                <td className="p-2 font-bold text-green-600">
+                                    {editingBalanceId === emp.id ? (
+                                        <div className="flex items-center gap-1">
+                                            <input 
+                                                type="number" 
+                                                className="w-20 p-1 text-xs border rounded"
+                                                value={tempBalance}
+                                                onChange={e => setTempBalance(e.target.value)}
+                                                autoFocus
+                                            />
+                                            <button onClick={() => handleSaveBalance(emp.id)} className="text-green-600 hover:bg-green-100 p-1 rounded"><Check size={14}/></button>
+                                            <button onClick={() => setEditingBalanceId(null)} className="text-slate-400 hover:bg-slate-100 p-1 rounded"><X size={14}/></button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2 group">
+                                            <span>{formatCurrency(emp.balance || 0)}</span>
+                                            <button onClick={() => { setEditingBalanceId(emp.id); setTempBalance(emp.balance || 0); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-cyan-600 transition-opacity">
+                                                <Edit size={12}/>
+                                            </button>
+                                        </div>
+                                    )}
                                 </td>
                                 <td className="p-2 text-right">
                                     <button 
-                                        onClick={() => { setSelectedEmp(emp); setPayForm({amount: stats[emp.id]?.earned || 0, note: ''}); setIsPaying(true); }} 
+                                        onClick={() => { setSelectedEmp(emp); setEditingPaymentId(null); setPayForm({amount: emp.balance || 0, note: '', method: 'Bank', date: ''}); setIsPaying(true); }} 
                                         className="text-xs text-white bg-indigo-600 px-3 py-1 rounded hover:bg-indigo-700"
                                     >
                                         Pay
@@ -1754,45 +2074,116 @@ function PayrollTab({ employees, attendance }) {
                     </tbody>
                 </table>
             </div>
+            <p className="text-xs text-slate-400 mt-2">* "Log Earnings" is calculated from loaded logs only. "Owed Balance" is the persistent ledger of earnings minus payments.</p>
          </div>
          
-         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700">
-            <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Recent Payments</h3>
-            {payments.map(pay => (
-                <div key={pay.id} className="flex justify-between p-2 text-sm border-b border-slate-50 dark:border-slate-700">
-                   <span className="text-slate-600 dark:text-slate-300">{pay.employeeName}</span>
-                   <span className="text-green-600 font-bold">{formatCurrency(pay.amount)}</span>
-                </div>
-            ))}
+         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-slate-800 dark:text-white">Recent Payments</h3>
+                <button onClick={handleExportHistory} className="flex items-center gap-1 text-sm bg-slate-100 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600">
+                    <Download size={14} /> Export History
+                </button>
+            </div>
+            <div className="flex gap-2 mb-4">
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="text-sm p-1 border rounded dark:bg-slate-700 dark:text-white dark:border-slate-600"/>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="text-sm p-1 border rounded dark:bg-slate-700 dark:text-white dark:border-slate-600"/>
+            </div>
+            
+            <div className="overflow-y-auto max-h-[400px]">
+                {filteredPayments.map(pay => (
+                    <div key={pay.id} className="flex justify-between items-center p-3 text-sm border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group">
+                       <div className="flex-1">
+                           <div className="font-medium text-slate-800 dark:text-white">{pay.employeeName}</div>
+                           <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2 mt-0.5">
+                               <span>{formatDateSafe(pay.date)}</span>
+                               <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-1.5 rounded text-[10px]">
+                                   {pay.method === 'Cash' ? <Banknote size={10} className="text-green-500"/> : <CreditCard size={10} className="text-blue-500"/>} 
+                                   {pay.method}
+                               </span>
+                           </div>
+                           {pay.note && (
+                               <div className="text-xs text-slate-500 dark:text-slate-400 italic mt-1 bg-slate-50 dark:bg-slate-800 p-1 rounded inline-block max-w-full truncate">
+                                   "{pay.note}"
+                               </div>
+                           )}
+                       </div>
+                       <div className="flex items-center gap-3">
+                           <span className="text-green-600 font-bold">{formatCurrency(pay.amount)}</span>
+                           <div className="flex gap-1">
+                               <button onClick={() => openEditPayment(pay)} className="text-slate-400 hover:text-cyan-600 p-1 hover:bg-slate-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={14}/></button>
+                               <button onClick={() => setDeletePaymentData(pay)} className="text-slate-400 hover:text-red-500 p-1 hover:bg-slate-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
+                           </div>
+                       </div>
+                    </div>
+                ))}
+            </div>
          </div>
       </div>
 
       {isPaying && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-sm">
-                <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Pay {selectedEmp?.name}</h3>
-                <form onSubmit={(e) => handlePayment(e, selectedEmp, payForm.amount, payForm.note, setIsPaying)} className="space-y-4">
-                    <input 
-                        type="number" 
-                        className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
-                        value={payForm.amount} 
-                        onChange={e=>setPayForm({...payForm, amount: e.target.value})} 
-                    />
-                    <input 
-                        type="text" 
-                        placeholder="Notes" 
-                        className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
-                        value={payForm.note} 
-                        onChange={e=>setPayForm({...payForm, note: e.target.value})} 
-                    />
-                    <div className="flex justify-end gap-2">
-                        <button type="button" onClick={()=>setIsPaying(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button>
-                        <button type="submit" className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700">Confirm Payment</button>
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-sm shadow-2xl">
+                <h3 className="font-bold mb-4 text-slate-800 dark:text-white">{editingPaymentId ? 'Edit Payment' : `Pay ${selectedEmp?.name}`}</h3>
+                <form onSubmit={handlePaymentSubmit} className="space-y-4">
+                    {editingPaymentId && (
+                        <div className="bg-yellow-50 text-yellow-800 p-2 text-xs rounded border border-yellow-100 mb-2">
+                            Warning: Changing amount will adjust the employee's owed balance.
+                        </div>
+                    )}
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Amount</label>
+                        <input 
+                            type="number" 
+                            className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white font-bold" 
+                            value={payForm.amount} 
+                            onChange={e=>setPayForm({...payForm, amount: e.target.value})} 
+                        />
+                    </div>
+                    {editingPaymentId && (
+                        <div>
+                            <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
+                            <input 
+                                type="datetime-local" 
+                                className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
+                                value={payForm.date ? new Date(new Date(payForm.date).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
+                                onChange={e=>setPayForm({...payForm, date: new Date(e.target.value).toISOString()})} 
+                            />
+                        </div>
+                    )}
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Method</label>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setPayForm({...payForm, method: 'Bank'})} className={`flex-1 py-2 rounded border text-sm flex items-center justify-center gap-2 ${payForm.method === 'Bank' ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-400' : 'border-slate-200 text-slate-600 dark:border-slate-600 dark:text-slate-400'}`}><CreditCard size={16}/> Bank</button>
+                            <button type="button" onClick={() => setPayForm({...payForm, method: 'Cash'})} className={`flex-1 py-2 rounded border text-sm flex items-center justify-center gap-2 ${payForm.method === 'Cash' ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400' : 'border-slate-200 text-slate-600 dark:border-slate-600 dark:text-slate-400'}`}><Banknote size={16}/> Cash</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
+                        <textarea 
+                            placeholder="Optional notes..." 
+                            className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white h-20 resize-none text-sm" 
+                            value={payForm.note} 
+                            onChange={e=>setPayForm({...payForm, note: e.target.value})} 
+                        />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button type="button" onClick={()=>{setIsPaying(false); setEditingPaymentId(null);}} className="px-3 py-2 text-slate-500 dark:text-slate-400 text-sm">Cancel</button>
+                        <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-bold">
+                            {editingPaymentId ? 'Update Payment' : 'Confirm Payment'}
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
       )}
+      
+      <ConfirmModal 
+        isOpen={!!deletePaymentData}
+        title="Delete Payment"
+        message={`Are you sure you want to delete this payment of ${deletePaymentData ? formatCurrency(deletePaymentData.amount) : ''}? This amount will be added back to the employee's owed balance.`}
+        onConfirm={handleDeletePayment}
+        onCancel={() => setDeletePaymentData(null)}
+      />
     </div>
   );
 }
@@ -1824,6 +2215,11 @@ function AbsencesTab({ employees, attendance, user }) {
           
           const missingEmps = employees.filter(emp => {
               if (emp.status !== 'Active') return false;
+              // Check for Auto-Absence Setting
+              if (emp.autoAbsence === false) return false;
+              // Skip if Auto Clock is enabled (handled in Dashboard)
+              if (emp.autoClock) return false;
+              
               const hasAttendance = attendance.some(l => l.employeeId === emp.id && l.timestamp.startsWith(yStr));
               const hasAbsence = absences.some(a => a.employeeId === emp.id && a.date === yStr);
               return !hasAttendance && !hasAbsence;
