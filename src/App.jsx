@@ -64,9 +64,12 @@ import {
   Save, 
   Filter, 
   CheckSquare, 
-  Square,
-  Tag,
-  Briefcase
+  Square, 
+  Tag, 
+  Briefcase,
+  RefreshCw,
+  Check,
+  Send
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -337,27 +340,31 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
 
   if (!employee) return null;
 
-  // Filter logs for this employee
-  let empLogs = (attendance || []).filter(log => log.employeeId === employee.id);
+  // IMPORTANT: Split attendance into "All Logs" (for calculations) and "Visible Logs" (for display)
+  const allEmpLogs = useMemo(() => {
+      return (attendance || []).filter(log => log.employeeId === employee.id);
+  }, [attendance, employee.id]);
 
-  // Apply Date Filters
-  empLogs = empLogs.filter(log => {
-      const d = new Date(log.timestamp);
-      if (isNaN(d.getTime())) return false;
-      const logDate = d.toISOString().slice(0, 10);
-      return logDate >= startDate && logDate <= endDate;
-  });
+  // Filter logs for display based on date range
+  const visibleEmpLogs = useMemo(() => {
+      return allEmpLogs.filter(log => {
+          const d = new Date(log.timestamp);
+          if (isNaN(d.getTime())) return false;
+          const logDate = d.toISOString().slice(0, 10);
+          return logDate >= startDate && logDate <= endDate;
+      });
+  }, [allEmpLogs, startDate, endDate]);
 
   // Group logs by date
   const logsByDate = useMemo(() => {
     const groups = {};
-    empLogs.forEach(log => {
+    visibleEmpLogs.forEach(log => {
       const dateKey = new Date(log.timestamp).toLocaleDateString();
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(log);
     });
     return groups;
-  }, [empLogs]);
+  }, [visibleEmpLogs]);
 
   const dailyStats = Object.keys(logsByDate).reduce((acc, dateKey) => {
     const logs = logsByDate[dateKey];
@@ -398,6 +405,11 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
       const timeB = new Date(dailyStats[b].logs[0].timestamp).getTime();
       return timeB - timeA;
   });
+
+  const totalUnpaid = visibleDates.reduce((sum, dateKey) => {
+      const day = dailyStats[dateKey];
+      return !day.isPaid ? sum + day.pay : sum;
+  }, 0);
 
   const handleEditClick = (log) => {
     const date = new Date(log.timestamp);
@@ -442,6 +454,68 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
       }
   };
 
+  const toggleActionType = async (log) => {
+      if (!window.confirm(`Switch this ${log.action} to ${log.action === 'IN' ? 'OUT' : 'IN'}?`)) return;
+      
+      const batch = writeBatch(db);
+      const logRef = doc(db, 'artifacts', appId, 'public', 'data', 'attendance', log.id);
+      const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', employee.id);
+
+      if (log.action === 'OUT') {
+          // OUT -> IN: Reverse earnings and hours
+          if (log.calculatedHours > 0) {
+              batch.update(empRef, {
+                  balance: increment(-(log.earnedAmount || 0)),
+                  totalHours: increment(-(log.calculatedHours || 0))
+              });
+          }
+          batch.update(logRef, {
+              action: 'IN',
+              calculatedHours: 0,
+              earnedAmount: 0
+          });
+      } else {
+          // IN -> OUT: Calculate using global attendance list to find nearest previous IN
+          // IMPORTANT: sort all logs descending to find the nearest previous record
+          const sortedAllLogs = [...allEmpLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+          const logTs = new Date(log.timestamp).getTime();
+          
+          // Find first IN record that is strictly older than current log
+          const prevIn = sortedAllLogs.find(l => 
+              l.action === 'IN' && 
+              l.id !== log.id && 
+              new Date(l.timestamp).getTime() < logTs
+          );
+          
+          let newHours = 0;
+          let newEarned = 0;
+
+          if (prevIn) {
+              const diffMs = logTs - new Date(prevIn.timestamp).getTime();
+              // Sanity check: less than 24 hours
+              if (diffMs > 0 && diffMs < 24 * 60 * 60 * 1000) {
+                  newHours = diffMs / (1000 * 60 * 60);
+                  newEarned = newHours * (parseFloat(employee.hourlyRate) || 0);
+              }
+          }
+
+          batch.update(logRef, {
+              action: 'OUT',
+              calculatedHours: newHours,
+              earnedAmount: newEarned
+          });
+
+          if (newHours > 0) {
+              batch.update(empRef, {
+                  balance: increment(newEarned),
+                  totalHours: increment(newHours)
+              });
+          }
+      }
+      await batch.commit();
+  };
+
   const toggleDayPaidStatus = async (dateKey) => {
       const dayData = dailyStats[dateKey];
       const newStatus = !dayData.isPaid;
@@ -457,11 +531,16 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
 
   const openManualForm = (dateStr) => {
       let defaultDate = new Date().toISOString().slice(0, 10);
-      const dayLogs = dailyStats[dateStr]?.logs;
-      if (dayLogs && dayLogs.length > 0) {
-          try {
-              defaultDate = new Date(dayLogs[0].timestamp).toISOString().slice(0, 10);
-          } catch(e) { /* fallback */ }
+      if (dateStr && dateStr.indexOf('/') === -1) { // Check if it looks like a YYYY-MM-DD key or a locale string
+          // If we pass a valid string from the date picker
+          defaultDate = dateStr;
+      } else {
+          const dayLogs = dailyStats[dateStr]?.logs;
+          if (dayLogs && dayLogs.length > 0) {
+              try {
+                  defaultDate = new Date(dayLogs[0].timestamp).toISOString().slice(0, 10);
+              } catch(e) { /* fallback */ }
+          }
       }
       setManualEntry({ date: defaultDate, time: '09:00', type: 'IN' });
       setShowManualForm(true);
@@ -475,7 +554,7 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
       const fullTimestamp = new Date(`${date}T${time}`).toISOString();
       const manualTs = new Date(fullTimestamp).getTime();
 
-      const duplicate = empLogs.find(l => Math.abs(new Date(l.timestamp).getTime() - manualTs) < 60000 && l.action === type);
+      const duplicate = allEmpLogs.find(l => Math.abs(new Date(l.timestamp).getTime() - manualTs) < 60000 && l.action === type);
       if (duplicate) { alert("Duplicate entry detected nearby."); return; }
 
       let calculatedHours = 0;
@@ -484,7 +563,7 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
       const newDocRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'));
 
       if (type === 'OUT') {
-          const matchingIn = empLogs
+          const matchingIn = allEmpLogs
               .filter(l => l.action === 'IN' && new Date(l.timestamp).getTime() < manualTs)
               .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
           
@@ -496,7 +575,7 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
               }
           }
       } else if (type === 'IN') {
-          const matchingOut = empLogs
+          const matchingOut = allEmpLogs
               .filter(l => l.action === 'OUT' && new Date(l.timestamp).getTime() > manualTs)
               .sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0];
           
@@ -571,11 +650,14 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                 <span className="text-sm text-slate-500 font-medium">To:</span>
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="p-1.5 rounded border border-slate-300 dark:border-slate-600 text-sm dark:bg-slate-800 dark:text-white" />
             </div>
-            <div className="h-6 w-px bg-slate-300 dark:bg-slate-700 mx-2 hidden sm:block"></div>
-            <button onClick={() => setShowUnpaidOnly(!showUnpaidOnly)} className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors ${showUnpaidOnly ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300 font-medium' : 'bg-white text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600'}`}>
-                <Filter size={14} />
-                {showUnpaidOnly ? 'Showing Unpaid Only' : 'Show All'}
-            </button>
+            <div className="flex-1 flex justify-end gap-3 items-center">
+                <span className="text-sm font-bold text-red-600 bg-red-50 dark:bg-red-900/30 px-3 py-1 rounded">
+                    Unpaid: {formatCurrency(totalUnpaid)}
+                </span>
+                <button onClick={() => openManualForm(new Date().toISOString().slice(0,10))} className="bg-cyan-600 text-white text-sm px-3 py-1.5 rounded flex items-center gap-1 hover:bg-cyan-700">
+                    <Plus size={16}/> Add Entry
+                </button>
+            </div>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1">
@@ -619,9 +701,13 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                                         <div key={log.id} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                             <div className="flex items-center gap-4">
                                                 <div className="flex flex-col items-center">
-                                                    <span className={`px-2 py-1 rounded text-xs font-bold w-12 text-center mb-1 ${log.action === 'IN' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                        {log.action}
-                                                    </span>
+                                                    <button 
+                                                        onClick={() => toggleActionType(log)}
+                                                        className={`px-2 py-1 rounded text-xs font-bold w-12 text-center mb-1 flex items-center justify-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${log.action === 'IN' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}
+                                                        title="Click to toggle IN/OUT"
+                                                    >
+                                                        {log.action} <RefreshCw size={8} />
+                                                    </button>
                                                     {log.source === 'manual' && (
                                                         <span className="text-[10px] text-orange-600 border border-orange-200 bg-orange-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5" title="Manually Added">
                                                             <Tag size={8}/>
@@ -656,6 +742,37 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                 </div>
             )}
         </div>
+
+        {showManualForm && (
+            <div className="absolute inset-0 z-50 bg-white/95 dark:bg-slate-900/95 flex flex-col items-center justify-center rounded-2xl animate-in fade-in zoom-in duration-200">
+                <div className="w-full max-w-sm p-6 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Add Missing Entry</h3>
+                    <form onSubmit={submitManualEntry} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Date</label>
+                            <input type="date" required value={manualEntry.date} onChange={e => setManualEntry({...manualEntry, date: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white"/>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Time</label>
+                                <input type="time" required value={manualEntry.time} onChange={e => setManualEntry({...manualEntry, time: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white"/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Type</label>
+                                <select value={manualEntry.type} onChange={e => setManualEntry({...manualEntry, type: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white">
+                                    <option value="IN">Check In</option>
+                                    <option value="OUT">Check Out</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                            <button type="button" onClick={() => setShowManualForm(false)} className="flex-1 py-3 text-slate-500 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                            <button type="submit" className="flex-1 py-3 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-700">Add Entry</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        )}
 
         <ConfirmModal 
             isOpen={!!deleteData}
@@ -946,7 +1063,7 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
             {activeTab === 'employees' && <EmployeesTab employees={employees} attendance={attendance} user={user} departments={departments} />}
             {activeTab === 'attendance' && <AttendanceTab attendance={attendance} />}
             {activeTab === 'payroll' && <PayrollTab employees={employees} attendance={attendance} />}
-            {activeTab === 'absences' && <AbsencesTab employees={employees} user={user} />}
+            {activeTab === 'absences' && <AbsencesTab employees={employees} attendance={attendance} user={user} />}
             {activeTab === 'settings' && <SettingsTab departments={departments} />}
         </div>
       </main>
@@ -1681,12 +1798,15 @@ function PayrollTab({ employees, attendance }) {
 }
 
 // --- Absences ---
-function AbsencesTab({ employees, user }) {
+function AbsencesTab({ employees, attendance, user }) {
   const [absences, setAbsences] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ employeeId: '', date: '', type: 'Sick', paid: false, notes: '' });
   const [geminiLoading, setGeminiLoading] = useState(false);
   const [geminiResult, setGeminiResult] = useState(null);
+  
+  // Delete Absence State
+  const [deleteId, setDeleteId] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -1695,14 +1815,66 @@ function AbsencesTab({ employees, user }) {
     return () => unsub();
   }, [user?.uid]);
 
+  // Automatic Check Effect
+  useEffect(() => {
+      if (employees.length > 0 && attendance.length > 0 && absences.length > 0) {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yStr = yesterday.toISOString().slice(0, 10);
+          
+          const missingEmps = employees.filter(emp => {
+              if (emp.status !== 'Active') return false;
+              const hasAttendance = attendance.some(l => l.employeeId === emp.id && l.timestamp.startsWith(yStr));
+              const hasAbsence = absences.some(a => a.employeeId === emp.id && a.date === yStr);
+              return !hasAttendance && !hasAbsence;
+          });
+
+          if (missingEmps.length > 0) {
+              const batch = writeBatch(db);
+              missingEmps.forEach(emp => {
+                  const ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'));
+                  batch.set(ref, {
+                      employeeId: emp.id,
+                      employeeName: emp.name,
+                      date: yStr,
+                      type: 'Unexcused Absence',
+                      paid: false,
+                      notes: 'Auto-generated by system',
+                      accountantNotified: false
+                  });
+              });
+              batch.commit().catch(console.error);
+          }
+      }
+  }, [employees.length, attendance.length, absences.length]); 
+
   const handleAddAbsence = async (e) => {
     e.preventDefault();
     const emp = (employees || []).find(e => e.id === form.employeeId);
     if (!emp) return;
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'), { ...form, employeeName: emp.name });
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'), { ...form, employeeName: emp.name, accountantNotified: false });
     setShowModal(false);
   };
   
+  const confirmDeleteAbsence = async () => {
+      if (!deleteId) return;
+      try {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'absences', deleteId));
+          setDeleteId(null);
+      } catch (e) {
+          console.error("Delete failed", e);
+          alert("Failed to delete absence");
+      }
+  };
+  
+  const toggleNotified = async (ab) => {
+      try {
+          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'absences', ab.id), {
+              accountantNotified: !ab.accountantNotified
+          });
+      } catch(e) { console.error("Update failed", e); }
+  };
+
   const handleDraftEmail = async (ab) => {
     setGeminiLoading(true); setGeminiResult(null);
     const text = await callGemini(`Draft email to ${ab.employeeName} about ${ab.type} absence on ${ab.date}. Status: ${ab.paid?'Paid':'Unpaid'}. Notes: ${ab.notes}. Be professional.`);
@@ -1713,8 +1885,15 @@ function AbsencesTab({ employees, user }) {
     <div className="space-y-6">
       <GeminiModal isOpen={!!geminiResult || geminiLoading} onClose={() => { setGeminiResult(null); setGeminiLoading(false); }} title={geminiResult?.title} content={geminiResult?.content} isLoading={geminiLoading} />
       <div className="flex justify-between"><h2 className="font-bold text-slate-800 dark:text-white">Leave Management</h2><button onClick={()=>setShowModal(true)} className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700">+ Record</button></div>
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden"><table className="w-full text-left text-sm"><thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-700">{(absences || []).map(ab => (<tr key={ab.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="px-6 py-3 text-slate-500 dark:text-slate-400">{ab.date}</td><td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{ab.employeeName}</td><td className="px-6 py-3 text-slate-600 dark:text-slate-300">{ab.type}</td><td className="px-6 py-3"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> Email</button></td></tr>))}</tbody></table></div>
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden"><table className="w-full text-left text-sm"><thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Accountant</th><th className="px-6 py-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-700">{(absences || []).map(ab => (<tr key={ab.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="px-6 py-3 text-slate-500 dark:text-slate-400">{ab.date}</td><td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{ab.employeeName}</td><td className="px-6 py-3 text-slate-600 dark:text-slate-300">{ab.type}</td><td className="px-6 py-3"><button onClick={() => toggleNotified(ab)} className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-colors ${ab.accountantNotified ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'}`}>{ab.accountantNotified ? <Check size={12}/> : <XCircle size={12}/>} {ab.accountantNotified ? 'Notified' : 'Pending'}</button></td><td className="px-6 py-3 flex gap-2"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 p-1.5 rounded"><Sparkles size={14}/> Email</button><button onClick={()=>setDeleteId(ab.id)} className="text-red-600 dark:text-red-400 flex items-center gap-1 hover:bg-red-50 dark:hover:bg-red-900/30 p-1.5 rounded"><Trash2 size={14}/></button></td></tr>))}</tbody></table></div>
       {showModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-md"><h3 className="font-bold mb-4 text-slate-800 dark:text-white">Record Absence</h3><form onSubmit={handleAddAbsence} className="space-y-4"><select required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.employeeId} onChange={e=>setForm({...form, employeeId: e.target.value})}><option value="">Select Employee...</option>{(employees || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select><input required type="date" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.date} onChange={e=>setForm({...form, date: e.target.value})} /><select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.type} onChange={e=>setForm({...form, type: e.target.value})}><option>Sick</option><option>Vacation</option><option>Personal</option></select><div className="flex justify-end gap-3"><button type="button" onClick={()=>setShowModal(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button><button type="submit" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">Save</button></div></form></div></div>)}
+      <ConfirmModal 
+        isOpen={!!deleteId}
+        title="Delete Absence"
+        message="Are you sure you want to delete this absence record? This cannot be undone."
+        onConfirm={confirmDeleteAbsence}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   );
 }
