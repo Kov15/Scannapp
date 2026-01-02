@@ -61,11 +61,12 @@ import {
   Bell, 
   Smartphone,
   FileText, 
-  Save,
+  Save, 
   Filter, 
   CheckSquare, 
   Square,
-  Tag 
+  Tag,
+  Briefcase
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -131,6 +132,7 @@ const formatHistoryDate = (dateStr) => {
 };
 
 const getSmartDuration = (currentLog, allLogs) => {
+  if (!currentLog) return 0;
   if (currentLog.calculatedHours !== undefined && currentLog.calculatedHours !== null && !isNaN(currentLog.calculatedHours) && currentLog.calculatedHours > 0.001) {
     return Number(currentLog.calculatedHours);
   }
@@ -226,7 +228,7 @@ const SimpleBarChart = ({ data, labels, color = "#0891b2" }) => {
 };
 
 const callGemini = async (prompt) => {
-  const apiKey = "AIzaSyBxo61DEjt0WerbLY9_jSW_WhTtpYJ4VJA"; 
+  const apiKey = ""; 
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
         method: "POST",
@@ -336,7 +338,7 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
   if (!employee) return null;
 
   // Filter logs for this employee
-  let empLogs = attendance.filter(log => log.employeeId === employee.id);
+  let empLogs = (attendance || []).filter(log => log.employeeId === employee.id);
 
   // Apply Date Filters
   empLogs = empLogs.filter(log => {
@@ -655,37 +657,6 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
             )}
         </div>
 
-        {showManualForm && (
-            <div className="absolute inset-0 z-50 bg-white/95 dark:bg-slate-900/95 flex flex-col items-center justify-center rounded-2xl animate-in fade-in zoom-in duration-200">
-                <div className="w-full max-w-sm p-6 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700">
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6">Add Missing Entry</h3>
-                    <form onSubmit={submitManualEntry} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Date</label>
-                            <input type="date" required value={manualEntry.date} onChange={e => setManualEntry({...manualEntry, date: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white"/>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Time</label>
-                                <input type="time" required value={manualEntry.time} onChange={e => setManualEntry({...manualEntry, time: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white"/>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Type</label>
-                                <select value={manualEntry.type} onChange={e => setManualEntry({...manualEntry, type: e.target.value})} className="w-full p-3 border rounded-lg dark:bg-slate-800 dark:border-slate-700 dark:text-white">
-                                    <option value="IN">Check In</option>
-                                    <option value="OUT">Check Out</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="flex gap-3 mt-6">
-                            <button type="button" onClick={() => setShowManualForm(false)} className="flex-1 py-3 text-slate-500 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
-                            <button type="submit" className="flex-1 py-3 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-700">Add Entry</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        )}
-
         <ConfirmModal 
             isOpen={!!deleteData}
             title="Delete Log Entry"
@@ -934,13 +905,28 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
-  
+  const [departments, setDepartments] = useState([]);
+
   useEffect(() => {
     if (!user) return;
     const empUnsub = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), (snap) => setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const attQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), orderBy('timestamp', 'desc'), limit(5000));
     const attUnsub = onSnapshot(attQuery, (snap) => setAttendance(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => { empUnsub(); attUnsub(); };
+    
+    // Departments Subscription
+    const deptRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'departments');
+    const deptUnsub = onSnapshot(deptRef, (snap) => {
+        if (snap.exists()) {
+            setDepartments(snap.data().list || []);
+        } else {
+            // Initialize default departments if document doesn't exist
+            const defaults = ['Operations', 'Sales', 'Management', 'HR', 'IT', 'Front of House', 'Back of House'];
+            setDoc(deptRef, { list: defaults });
+            setDepartments(defaults);
+        }
+    });
+
+    return () => { empUnsub(); attUnsub(); deptUnsub(); };
   }, [user?.uid]);
 
   const MenuItem = ({ id, icon: Icon, label }) => ( <button onClick={() => setActiveTab(id)} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === id ? 'bg-cyan-500/10 text-cyan-500 dark:bg-cyan-600/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400'}`}><Icon size={20} /><span className="font-medium">{label}</span></button> );
@@ -955,25 +941,30 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
       <main className="flex-1 overflow-auto p-8">
         <header className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold text-slate-800 dark:text-white capitalize">{activeTab}</h1><div className="text-sm text-slate-500 dark:text-slate-400">Welcome, Master Admin</div></header>
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {activeTab === 'analytics' && <AnalyticsTab employees={employees} attendance={attendance} />}
+            {activeTab === 'analytics' && <AnalyticsTab employees={employees} attendance={attendance} departments={departments} />}
             {activeTab === 'overview' && <OverviewTab employees={employees} attendance={attendance} user={user} />}
-            {activeTab === 'employees' && <EmployeesTab employees={employees} attendance={attendance} user={user} />}
+            {activeTab === 'employees' && <EmployeesTab employees={employees} attendance={attendance} user={user} departments={departments} />}
             {activeTab === 'attendance' && <AttendanceTab attendance={attendance} />}
             {activeTab === 'payroll' && <PayrollTab employees={employees} attendance={attendance} />}
             {activeTab === 'absences' && <AbsencesTab employees={employees} user={user} />}
-            {activeTab === 'settings' && <SettingsTab />}
+            {activeTab === 'settings' && <SettingsTab departments={departments} />}
         </div>
       </main>
     </div>
   );
 }
 
-function SettingsTab() {
+function SettingsTab({ departments }) {
   const [config, setConfig] = useState({ userKey: '', apiToken: '', enabled: false, sound: 'cashregister' });
   const [isSaved, setIsSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [passForm, setPassForm] = useState({ newPass: '', confirmPass: '' });
   const [isPassSaved, setIsPassSaved] = useState(false);
+  
+  // Department Management State
+  const [newDept, setNewDept] = useState('');
+  const [editingDept, setEditingDept] = useState({ original: '', current: '' });
+  const [deptToDelete, setDeptToDelete] = useState(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1009,61 +1000,148 @@ function SettingsTab() {
       } catch (e) { alert("Failed to update password"); }
   };
 
+  const handleAddDept = async () => {
+      if (!newDept.trim() || departments.includes(newDept.trim())) return;
+      const updated = [...departments, newDept.trim()];
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'departments'), { list: updated });
+      setNewDept('');
+  };
+
+  const handleDeleteDept = (dept) => {
+      setDeptToDelete(dept);
+  };
+
+  const confirmDeleteDept = async () => {
+      if (!deptToDelete) return;
+      const updated = departments.filter(d => d !== deptToDelete);
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'departments'), { list: updated });
+      setDeptToDelete(null);
+  };
+
+  const handleStartEditDept = (dept) => {
+      setEditingDept({ original: dept, current: dept });
+  };
+
+  const handleSaveEditDept = async () => {
+      if (!editingDept.current.trim() || editingDept.current === editingDept.original) {
+          setEditingDept({ original: '', current: '' });
+          return;
+      }
+      const updated = departments.map(d => d === editingDept.original ? editingDept.current.trim() : d);
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'departments'), { list: updated });
+      setEditingDept({ original: '', current: '' });
+  };
+
   if (isLoading) return <div className="p-8 text-center text-slate-500">Loading settings...</div>;
 
   return (
-    <div className="max-w-xl mx-auto space-y-8">
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm">
-            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Pushover Notifications</h2>
-            <form onSubmit={handleSave} className="space-y-4">
-                <div className="flex items-center gap-2 mb-4"><input type="checkbox" checked={config.enabled} onChange={e=>setConfig({...config, enabled: e.target.checked})} /> <span>Enable Notifications</span></div>
-                <input className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="User Key" value={config.userKey} onChange={e=>setConfig({...config, userKey: e.target.value})} />
-                <input className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" type="password" placeholder="API Token" value={config.apiToken} onChange={e=>setConfig({...config, apiToken: e.target.value})} />
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Notification Sound</label>
-                    <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={config.sound} onChange={e=>setConfig({...config, sound: e.target.value})}>
-                        <option value="pushover">Pushover (Default)</option>
-                        <option value="cashregister">Cash Register</option>
-                        <option value="bike">Bike</option>
-                        <option value="bugle">Bugle</option>
-                        <option value="classical">Classical</option>
-                        <option value="cosmic">Cosmic</option>
-                        <option value="falling">Falling</option>
-                        <option value="gamelan">Gamelan</option>
-                        <option value="incoming">Incoming</option>
-                        <option value="intermission">Intermission</option>
-                        <option value="magic">Magic</option>
-                        <option value="mechanical">Mechanical</option>
-                        <option value="pianobar">Piano Bar</option>
-                        <option value="siren">Siren</option>
-                        <option value="spacealarm">Space Alarm</option>
-                        <option value="tugboat">Tugboat</option>
-                        <option value="alien">Alien Alarm</option>
-                        <option value="climb">Climb</option>
-                        <option value="persistent">Persistent</option>
-                        <option value="echo">Echo</option>
-                        <option value="updown">Up Down</option>
-                        <option value="none">None (Silent)</option>
-                    </select>
+    <div className="max-w-4xl mx-auto space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm">
+                <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Briefcase size={20} className="text-cyan-600"/> Departments</h2>
+                <div className="space-y-3 mb-6">
+                    {departments?.map((dept, i) => (
+                        <div key={dept} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600">
+                            {editingDept.original === dept ? (
+                                <div className="flex items-center gap-2 w-full">
+                                    <input 
+                                        type="text" 
+                                        value={editingDept.current} 
+                                        onChange={(e) => setEditingDept({...editingDept, current: e.target.value})}
+                                        className="flex-1 p-1 text-sm border rounded dark:bg-slate-800 dark:text-white"
+                                        autoFocus
+                                    />
+                                    <button onClick={handleSaveEditDept} className="text-green-600 hover:bg-green-50 p-1 rounded"><CheckCircle2 size={16}/></button>
+                                    <button onClick={() => setEditingDept({original: '', current: ''})} className="text-slate-400 hover:bg-slate-200 p-1 rounded"><X size={16}/></button>
+                                </div>
+                            ) : (
+                                <>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{dept}</span>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => handleStartEditDept(dept)} className="text-slate-400 hover:text-cyan-600 p-1 hover:bg-cyan-50 rounded"><Edit size={14}/></button>
+                                        <button onClick={() => handleDeleteDept(dept)} className="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ))}
                 </div>
-                <button className="bg-cyan-600 text-white px-4 py-2 rounded w-full hover:bg-cyan-700 transition-colors">{isSaved ? 'Saved!' : 'Save Notifications'}</button>
-            </form>
+                <div className="flex gap-2">
+                    <input 
+                        type="text" 
+                        placeholder="New Department..." 
+                        value={newDept}
+                        onChange={(e) => setNewDept(e.target.value)}
+                        className="flex-1 p-2 border rounded bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-sm"
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddDept()}
+                    />
+                    <button onClick={handleAddDept} className="bg-cyan-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-cyan-700"><Plus size={18}/></button>
+                </div>
+            </div>
+
+            <div className="space-y-8">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm">
+                    <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Pushover Notifications</h2>
+                    <form onSubmit={handleSave} className="space-y-4">
+                        <div className="flex items-center gap-2 mb-4"><input type="checkbox" checked={config.enabled} onChange={e=>setConfig({...config, enabled: e.target.checked})} /> <span>Enable Notifications</span></div>
+                        <input className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="User Key" value={config.userKey} onChange={e=>setConfig({...config, userKey: e.target.value})} />
+                        <input className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" type="password" placeholder="API Token" value={config.apiToken} onChange={e=>setConfig({...config, apiToken: e.target.value})} />
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Notification Sound</label>
+                            <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={config.sound} onChange={e=>setConfig({...config, sound: e.target.value})}>
+                                <option value="pushover">Pushover (Default)</option>
+                                <option value="cashregister">Cash Register</option>
+                                <option value="bike">Bike</option>
+                                <option value="bugle">Bugle</option>
+                                <option value="classical">Classical</option>
+                                <option value="cosmic">Cosmic</option>
+                                <option value="falling">Falling</option>
+                                <option value="gamelan">Gamelan</option>
+                                <option value="incoming">Incoming</option>
+                                <option value="intermission">Intermission</option>
+                                <option value="magic">Magic</option>
+                                <option value="mechanical">Mechanical</option>
+                                <option value="pianobar">Piano Bar</option>
+                                <option value="siren">Siren</option>
+                                <option value="spacealarm">Space Alarm</option>
+                                <option value="tugboat">Tugboat</option>
+                                <option value="alien">Alien Alarm</option>
+                                <option value="climb">Climb</option>
+                                <option value="persistent">Persistent</option>
+                                <option value="echo">Echo</option>
+                                <option value="updown">Up Down</option>
+                                <option value="none">None (Silent)</option>
+                            </select>
+                        </div>
+                        <button className="bg-cyan-600 text-white px-4 py-2 rounded w-full hover:bg-cyan-700 transition-colors">{isSaved ? 'Saved!' : 'Save Notifications'}</button>
+                    </form>
+                </div>
+                
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border-l-4 border-orange-500">
+                    <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Lock size={20} className="text-orange-500"/> Admin Security</h2>
+                    <form onSubmit={handleUpdatePassword} className="space-y-4">
+                        <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">New Password</label><input type="password" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={passForm.newPass} onChange={e => setPassForm({...passForm, newPass: e.target.value})} placeholder="Enter new password" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Confirm Password</label><input type="password" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={passForm.confirmPass} onChange={e => setPassForm({...passForm, confirmPass: e.target.value})} placeholder="Confirm new password" /></div>
+                        <button type="submit" className="bg-orange-600 text-white px-4 py-2 rounded w-full hover:bg-orange-700 transition-colors font-medium">{isPassSaved ? 'Password Updated!' : 'Update Password'}</button>
+                    </form>
+                </div>
+            </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border-l-4 border-orange-500">
-            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white flex items-center gap-2"><Lock size={20} className="text-orange-500"/> Admin Security</h2>
-            <form onSubmit={handleUpdatePassword} className="space-y-4">
-                <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">New Password</label><input type="password" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={passForm.newPass} onChange={e => setPassForm({...passForm, newPass: e.target.value})} placeholder="Enter new password" /></div>
-                <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Confirm Password</label><input type="password" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={passForm.confirmPass} onChange={e => setPassForm({...passForm, confirmPass: e.target.value})} placeholder="Confirm new password" /></div>
-                <button type="submit" className="bg-orange-600 text-white px-4 py-2 rounded w-full hover:bg-orange-700 transition-colors font-medium">{isPassSaved ? 'Password Updated!' : 'Update Password'}</button>
-            </form>
-        </div>
+        <ConfirmModal 
+            isOpen={!!deptToDelete}
+            title="Delete Department"
+            message={`Are you sure you want to delete "${deptToDelete}"? Employees in this department will remain but the label will be gone from the list.`}
+            onConfirm={confirmDeleteDept}
+            onCancel={() => setDeptToDelete(null)}
+        />
     </div>
   );
 }
 
-function AnalyticsTab({ employees, attendance }) {
+function AnalyticsTab({ employees, attendance, departments }) {
   const [range, setRange] = useState('Month');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('all'); 
+  const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const navigateDate = (direction) => {
@@ -1108,8 +1186,17 @@ function AnalyticsTab({ employees, attendance }) {
       return !isNaN(d.getTime()) && d >= startWindow && d <= endWindow;
     };
 
-    let filteredLogs = attendance.filter(log => rangeFilter(log.timestamp));
-    if (selectedEmployeeId !== 'all') filteredLogs = filteredLogs.filter(log => log.employeeId === selectedEmployeeId);
+    let filteredLogs = (attendance || []).filter(log => rangeFilter(log.timestamp));
+    
+    // Apply filters
+    if (selectedEmployeeId !== 'all') {
+        filteredLogs = filteredLogs.filter(log => log.employeeId === selectedEmployeeId);
+    } else if (selectedDepartment !== 'all') {
+        filteredLogs = filteredLogs.filter(log => {
+            const emp = (employees || []).find(e => e.id === log.employeeId);
+            return emp && emp.department === selectedDepartment;
+        });
+    }
     
     const outs = filteredLogs.filter(log => log.action === 'OUT');
     const empStats = {}; 
@@ -1119,7 +1206,7 @@ function AnalyticsTab({ employees, attendance }) {
     outs.forEach(log => {
         const duration = getSmartDuration(log, attendance);
         totalH += duration;
-        const emp = employees.find(e => e.id === log.employeeId);
+        const emp = (employees || []).find(e => e.id === log.employeeId);
         const rate = emp ? parseFloat(emp.hourlyRate||0) : 0;
         totalE += (duration * rate);
         if (!empStats[log.employeeId]) empStats[log.employeeId] = 0;
@@ -1160,12 +1247,18 @@ function AnalyticsTab({ employees, attendance }) {
     else displayTitle = startWindow.getFullYear();
 
     return { totalH, totalE, avgShift, chartData, labels, displayTitle, empStats };
-  }, [attendance, employees, range, selectedEmployeeId, currentDate]);
+  }, [attendance, employees, range, selectedEmployeeId, selectedDepartment, currentDate]);
 
   const handleExportCSV = () => { window.alert("Exporting CSV..."); };
 
-  const topEmployees = employees
+  // Filter employees for the dropdown based on selected department
+  const filteredEmployees = selectedDepartment === 'all' 
+    ? (employees || [])
+    : (employees || []).filter(e => e.department === selectedDepartment);
+
+  const topEmployees = (employees || [])
     .map(e => ({...e, calculatedPeriodHours: metrics.empStats[e.id] || 0 }))
+    .filter(e => selectedDepartment === 'all' || e.department === selectedDepartment)
     .sort((a,b) => b.calculatedPeriodHours - a.calculatedPeriodHours)
     .slice(0,3);
 
@@ -1173,7 +1266,33 @@ function AnalyticsTab({ employees, attendance }) {
     <div className="space-y-6">
       <div className="flex flex-col xl:flex-row justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm gap-4">
          <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
-             <div className="flex items-center gap-2 w-full sm:w-auto"><Users size={16} className="text-slate-400 dark:text-slate-500" /><select value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-48 font-medium"><option value="all">All Employees</option>{employees.map(emp => (<option key={emp.id} value={emp.id}>{emp.name}</option>))}</select></div>
+             
+             {/* Department Filter */}
+             <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Briefcase size={16} className="text-slate-400 dark:text-slate-500" />
+                <select 
+                    value={selectedDepartment} 
+                    onChange={(e) => { setSelectedDepartment(e.target.value); setSelectedEmployeeId('all'); }} 
+                    className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-40 font-medium"
+                >
+                    <option value="all">All Depts</option>
+                    {departments?.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+             </div>
+
+             {/* Employee Filter */}
+             <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Users size={16} className="text-slate-400 dark:text-slate-500" />
+                <select 
+                    value={selectedEmployeeId} 
+                    onChange={(e) => setSelectedEmployeeId(e.target.value)} 
+                    className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-white text-sm rounded-lg p-2 focus:ring-2 focus:ring-cyan-500 outline-none w-full sm:w-48 font-medium"
+                >
+                    <option value="all">All Employees</option>
+                    {filteredEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.name}</option>))}
+                </select>
+             </div>
+             
              <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg w-full sm:w-auto">{['Day', 'Week', 'Month', 'Year'].map(r => (<button key={r} onClick={() => { setRange(r); setCurrentDate(new Date()); }} className={`flex-1 sm:flex-none px-3 py-1 text-sm rounded-md transition-all ${range === r ? 'bg-white shadow text-cyan-600 dark:bg-slate-600 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}>{r}</button>))}</div>
          </div>
          <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600"><button onClick={() => navigateDate(-1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors"><ChevronLeft size={20} /></button><span className="font-bold text-slate-700 dark:text-white w-40 text-center text-sm">{metrics.displayTitle}</span><button onClick={() => navigateDate(1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors"><ChevronRight size={20} /></button></div>
@@ -1198,10 +1317,21 @@ function AnalyticsTab({ employees, attendance }) {
 
 // --- Overview (With Live Clocks) ---
 function OverviewTab({ employees, attendance, user }) {
-  const activeEmployees = employees.filter(e => e.isCheckedIn);
-  const totalEmployees = employees.length;
-  const today = new Date().toLocaleDateString();
-  const todayScans = attendance.filter(a => { const d = new Date(a.timestamp); return !isNaN(d.getTime()) && d.toLocaleDateString() === today; });
+  const [today, setToday] = useState(new Date().toLocaleDateString());
+
+  // Use memoization for calculations to prevent re-renders on every tick if not needed
+  const activeEmployees = useMemo(() => {
+      return (employees || []).filter(e => e.isCheckedIn);
+  }, [employees]);
+
+  const totalEmployees = (employees || []).length;
+
+  const todayScans = useMemo(() => {
+      return (attendance || []).filter(a => { 
+          const d = new Date(a.timestamp); 
+          return !isNaN(d.getTime()) && d.toLocaleDateString() === today; 
+      });
+  }, [attendance, today]);
 
   const handleQuickCheckout = async (emp) => {
     if (!window.confirm(`Force checkout for ${emp.name}?`)) return;
@@ -1248,9 +1378,9 @@ function OverviewTab({ employees, attendance, user }) {
 }
 
 // --- Employees Management ---
-function EmployeesTab({ employees, attendance, user }) {
+function EmployeesTab({ employees, attendance, user, departments }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({ name: '', barcode: '', hourlyRate: 0, status: 'Active' });
+  const [formData, setFormData] = useState({ name: '', barcode: '', hourlyRate: 0, status: 'Active', department: 'Operations' });
   const [search, setSearch] = useState('');
   const [showBarcode, setShowBarcode] = useState(null); 
   const [geminiLoading, setGeminiLoading] = useState(false);
@@ -1272,19 +1402,23 @@ function EmployeesTab({ employees, attendance, user }) {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), { ...formData, barcode: newBarcode, balance: 0, totalHours: 0, isCheckedIn: false, hourlyRate: Number(formData.hourlyRate) });
       }
       setIsEditing(false);
-      setFormData({ name: '', barcode: '', hourlyRate: 0, status: 'Active' });
+      setFormData({ name: '', barcode: '', hourlyRate: 0, status: 'Active', department: 'Operations' });
     } catch(err) { console.error(err); window.alert(err.message); }
   };
 
   const handleGeminiAnalysis = async (emp) => {
     setGeminiLoading(true); setGeminiResult(null);
-    const empLogs = attendance.filter(a => a.employeeId === emp.id).slice(0, 20); 
-    const context = `Employee: ${emp.name}, Hours: ${emp.totalHours?.toFixed(2)||0}, Rate: ${emp.hourlyRate}, Bal: ${emp.balance||0}. Logs: ${empLogs.map(l => `${l.action} ${l.timestamp}`).join(', ')}`;
+    const empLogs = (attendance || []).filter(a => a.employeeId === emp.id).slice(0, 20); 
+    const context = `Employee: ${emp.name}, Dept: ${emp.department || 'N/A'}, Hours: ${emp.totalHours?.toFixed(2)||0}, Rate: ${emp.hourlyRate}, Bal: ${emp.balance||0}. Logs: ${empLogs.map(l => `${l.action} ${l.timestamp}`).join(', ')}`;
     const text = await callGemini(`Act as HR Analyst. Analyze employee ${emp.name}. Summarize punctuality and consistency in 3 sentences. Data: ${context}`);
     setGeminiResult({ title: `Review: ${emp.name}`, content: text }); setGeminiLoading(false);
   };
 
-  const filtered = employees.filter(e => e.name.toLowerCase().includes(search.toLowerCase()) || e.barcode?.includes(search));
+  const filtered = (employees || []).filter(e => {
+      const nameMatch = (e.name || '').toLowerCase().includes(search.toLowerCase());
+      const codeMatch = String(e.barcode || '').includes(search);
+      return nameMatch || codeMatch;
+  });
 
   return (
     <div className="space-y-6">
@@ -1300,13 +1434,23 @@ function EmployeesTab({ employees, attendance, user }) {
         />
       )}
 
-      <div className="flex flex-col sm:flex-row justify-between gap-4"><div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18} /><input type="text" placeholder="Search by name or code..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg w-full sm:w-64 text-slate-800 dark:text-white" /></div><button onClick={() => { setFormData({ name: '', barcode: '', hourlyRate: 0, status: 'Active' }); setIsEditing(true); }} className="bg-cyan-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-cyan-700"><Plus size={18} /> Add Employee</button></div>
+      <div className="flex flex-col sm:flex-row justify-between gap-4"><div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18} /><input type="text" placeholder="Search by name or code..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg w-full sm:w-64 text-slate-800 dark:text-white" /></div><button onClick={() => { setFormData({ name: '', barcode: '', hourlyRate: 0, status: 'Active', department: departments?.[0] || 'Operations' }); setIsEditing(true); }} className="bg-cyan-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-cyan-700"><Plus size={18} /> Add Employee</button></div>
       {isEditing && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6">
             <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">{formData.id ? 'Edit' : 'New'} Employee</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Name</label><input required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} /></div>
+              
+              <div>
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</label>
+                  <select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })}>
+                      {departments?.map(d => (
+                          <option key={d} value={d}>{d}</option>
+                      ))}
+                  </select>
+              </div>
+
               <div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">QR Code ID (5 Digits)</label><input required type="number" className="w-full p-2 border rounded font-mono bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.barcode} onChange={e => setFormData({ ...formData, barcode: e.target.value.slice(0, 5) })} placeholder="e.g. 10001" /><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">This 5-digit code is the key for the scanner. It is encoded directly in the QR code.</p></div>
               <div className="grid grid-cols-2 gap-4"><div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Rate (€)</label><input required type="number" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.hourlyRate} onChange={e=>setFormData({...formData, hourlyRate: e.target.value})} /></div><div><label className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</label><select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={formData.status} onChange={e=>setFormData({...formData, status: e.target.value})}><option>Active</option><option>Inactive</option></select></div></div>
               <div className="flex justify-end gap-3 mt-6"><button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 rounded">Cancel</button><button type="submit" className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700">Save</button></div>
@@ -1315,7 +1459,14 @@ function EmployeesTab({ employees, attendance, user }) {
         </div>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">{filtered.map(emp => (<div key={emp.id} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex justify-between items-center group hover:border-cyan-300 transition-colors">
-        <div><h4 className="font-bold text-lg text-slate-800 dark:text-white">{emp.name}</h4><p className="text-sm text-slate-500 dark:text-slate-400">ID: {emp.barcode}</p><p className="text-sm text-slate-500 dark:text-slate-400">Bal: {formatCurrency(emp.balance || 0)}</p></div>
+        <div>
+            <h4 className="font-bold text-lg text-slate-800 dark:text-white">{emp.name}</h4>
+            <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{emp.department || 'Operations'}</span>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">ID: {emp.barcode}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Bal: {formatCurrency(emp.balance || 0)}</p>
+        </div>
         <div className="flex gap-2">
             {/* Added History Button */}
             <button onClick={() => setHistoryEmp(emp)} className="p-2 bg-blue-50 text-blue-600 rounded-lg dark:bg-blue-900/30 dark:text-blue-400" title="View History"><FileText size={16} /></button>
@@ -1349,24 +1500,14 @@ function AttendanceTab({ attendance }) {
     catch (error) { console.error("Error deleting log:", error); alert("Failed to delete log."); }
   };
 
-  const getSmartDuration = (currentLog, allLogs) => {
-    if (currentLog.calculatedHours !== undefined && currentLog.calculatedHours !== null && currentLog.calculatedHours > 0.001) return currentLog.calculatedHours;
-    if (currentLog.action === 'OUT') {
-      const outTime = new Date(currentLog.timestamp).getTime();
-      if(isNaN(outTime)) return 0;
-      const match = allLogs.find(l => l.employeeId === currentLog.employeeId && l.action === 'IN' && new Date(l.timestamp).getTime() < outTime);
-      if (match) {
-        const inTime = new Date(match.timestamp).getTime();
-        if(isNaN(inTime)) return 0;
-        const diffMs = outTime - inTime;
-        if (diffMs > 0 && diffMs < 24 * 60 * 60 * 1000) return diffMs / (1000 * 60 * 60);
-      }
-    }
-    return 0;
-  };
-
   // Client-side sort to fix optimistic updates appearing at top
-  const sortedAttendance = [...attendance].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const sortedAttendance = useMemo(() => {
+      return (attendance || []).sort((a, b) => {
+          const tA = new Date(a.timestamp || 0).getTime();
+          const tB = new Date(b.timestamp || 0).getTime();
+          return tB - tA;
+      });
+  }, [attendance]);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -1415,13 +1556,13 @@ function AttendanceTab({ attendance }) {
 function PayrollTab({ employees, attendance }) {
   const stats = useMemo(() => {
     const s = {};
-    employees.forEach(e => s[e.id] = { earned: 0, hours: 0 });
+    (employees || []).forEach(e => s[e.id] = { earned: 0, hours: 0 });
     
-    attendance.forEach(log => {
+    (attendance || []).forEach(log => {
         if (log.action === 'OUT') {
             const dur = getSmartDuration(log, attendance); 
             if (s[log.employeeId] && dur > 0) {
-                const emp = employees.find(e => e.id === log.employeeId);
+                const emp = (employees || []).find(e => e.id === log.employeeId);
                 const rate = emp ? parseFloat(emp.hourlyRate||0) : 0;
                 s[log.employeeId].hours += dur;
                 s[log.employeeId].earned += (dur * rate);
@@ -1474,7 +1615,7 @@ function PayrollTab({ employees, attendance }) {
                         </tr>
                     </thead>
                     <tbody className="divide-y dark:divide-slate-700">
-                        {employees.map(emp => (
+                        {(employees || []).map(emp => (
                             <tr key={emp.id}>
                                 <td className="p-2 font-medium dark:text-slate-200">{emp.name}</td>
                                 <td className="p-2 text-slate-500 dark:text-slate-400">
@@ -1556,7 +1697,7 @@ function AbsencesTab({ employees, user }) {
 
   const handleAddAbsence = async (e) => {
     e.preventDefault();
-    const emp = employees.find(e => e.id === form.employeeId);
+    const emp = (employees || []).find(e => e.id === form.employeeId);
     if (!emp) return;
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'), { ...form, employeeName: emp.name });
     setShowModal(false);
@@ -1572,8 +1713,8 @@ function AbsencesTab({ employees, user }) {
     <div className="space-y-6">
       <GeminiModal isOpen={!!geminiResult || geminiLoading} onClose={() => { setGeminiResult(null); setGeminiLoading(false); }} title={geminiResult?.title} content={geminiResult?.content} isLoading={geminiLoading} />
       <div className="flex justify-between"><h2 className="font-bold text-slate-800 dark:text-white">Leave Management</h2><button onClick={()=>setShowModal(true)} className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700">+ Record</button></div>
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden"><table className="w-full text-left text-sm"><thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-700">{absences.map(ab => (<tr key={ab.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="px-6 py-3 text-slate-500 dark:text-slate-400">{ab.date}</td><td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{ab.employeeName}</td><td className="px-6 py-3 text-slate-600 dark:text-slate-300">{ab.type}</td><td className="px-6 py-3"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> Email</button></td></tr>))}</tbody></table></div>
-      {showModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-md"><h3 className="font-bold mb-4 text-slate-800 dark:text-white">Record Absence</h3><form onSubmit={handleAddAbsence} className="space-y-4"><select required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.employeeId} onChange={e=>setForm({...form, employeeId: e.target.value})}><option value="">Select Employee...</option>{employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select><input required type="date" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.date} onChange={e=>setForm({...form, date: e.target.value})} /><select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.type} onChange={e=>setForm({...form, type: e.target.value})}><option>Sick</option><option>Vacation</option><option>Personal</option></select><div className="flex justify-end gap-3"><button type="button" onClick={()=>setShowModal(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button><button type="submit" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">Save</button></div></form></div></div>)}
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden"><table className="w-full text-left text-sm"><thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-700">{(absences || []).map(ab => (<tr key={ab.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="px-6 py-3 text-slate-500 dark:text-slate-400">{ab.date}</td><td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{ab.employeeName}</td><td className="px-6 py-3 text-slate-600 dark:text-slate-300">{ab.type}</td><td className="px-6 py-3"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1"><Sparkles size={12}/> Email</button></td></tr>))}</tbody></table></div>
+      {showModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-md"><h3 className="font-bold mb-4 text-slate-800 dark:text-white">Record Absence</h3><form onSubmit={handleAddAbsence} className="space-y-4"><select required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.employeeId} onChange={e=>setForm({...form, employeeId: e.target.value})}><option value="">Select Employee...</option>{(employees || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select><input required type="date" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.date} onChange={e=>setForm({...form, date: e.target.value})} /><select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.type} onChange={e=>setForm({...form, type: e.target.value})}><option>Sick</option><option>Vacation</option><option>Personal</option></select><div className="flex justify-end gap-3"><button type="button" onClick={()=>setShowModal(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button><button type="submit" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">Save</button></div></form></div></div>)}
     </div>
   );
 }
