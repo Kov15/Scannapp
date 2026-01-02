@@ -16,6 +16,7 @@ import {
   setDoc, 
   doc, 
   getDoc, 
+  getDocs,
   query, 
   onSnapshot, 
   serverTimestamp, 
@@ -74,7 +75,11 @@ import {
   Banknote, 
   ToggleLeft, 
   ToggleRight, 
-  ClipboardList
+  ClipboardList,
+  Gift,
+  ShieldAlert,
+  MinusCircle,
+  PlusCircle
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -427,10 +432,39 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
   const handleSaveEdit = async (logId) => {
     try {
         const newDate = new Date(editTime);
+        const newIso = newDate.toISOString();
+        
+        // 1. Update the Attendance Log
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', logId), {
-            timestamp: newDate.toISOString(),
+            timestamp: newIso,
             calculatedHours: 0 
         });
+
+        // 2. Sync with Employee Record if this is the active Check-In
+        // This fixes the issue where Live Feed shows old time even after edit
+        const targetLog = attendance.find(l => l.id === logId);
+        if (targetLog && targetLog.action === 'IN' && employee.isCheckedIn) {
+             const latestQ = query(
+                collection(db, 'artifacts', appId, 'public', 'data', 'attendance'),
+                where('employeeId', '==', employee.id),
+                where('action', '==', 'IN'),
+                orderBy('timestamp', 'desc'),
+                limit(1)
+             );
+             const snaps = await getDocs(latestQ);
+             if (!snaps.empty) {
+                 const latestIn = snaps.docs[0].data();
+                 // If the ID matches the one we just edited, use our new time. 
+                 // Otherwise use what DB has (which might be the same if cache updated, or different)
+                 let timeToSet = latestIn.timestamp;
+                 if (snaps.docs[0].id === logId) timeToSet = newIso;
+
+                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', employee.id), {
+                     lastCheckInTime: timeToSet
+                 });
+             }
+        }
+
         setEditingId(null);
     } catch (e) { console.error("Update failed", e); alert("Update failed"); }
   };
@@ -1841,11 +1875,13 @@ function PayrollTab({ employees, attendance }) {
   const [startDate, setStartDate] = useState(startOfMonth);
   const [endDate, setEndDate] = useState(endOfMonth);
   
-  // State for adding/editing payments
+  // State for adding/editing payments & adjustments
   const [isPaying, setIsPaying] = useState(false);
+  const [isAdjusting, setIsAdjusting] = useState(false); // NEW: For "Extra Payments" modal
   const [editingPaymentId, setEditingPaymentId] = useState(null); // ID of payment being edited
-  const [originalPaymentAmount, setOriginalPaymentAmount] = useState(0); // To calc difference
+  const [originalPaymentAmount, setOriginalPaymentAmount] = useState(0); 
   const [payForm, setPayForm] = useState({ amount: 0, note: '', method: 'Bank', date: '' });
+  const [adjustForm, setAdjustForm] = useState({ amount: 0, note: '', category: 'Bonus', type: 'add', date: '' }); // NEW
   const [selectedEmp, setSelectedEmp] = useState(null);
   
   const [payments, setPayments] = useState([]);
@@ -1879,12 +1915,6 @@ function PayrollTab({ employees, attendance }) {
 
     try {
         if (editingPaymentId) {
-            // EDITING EXISTING PAYMENT
-            // Logic: Balance = Balance + OldAmount - NewAmount
-            // Example: Owed 500. Paid 100 -> Bal 400.
-            // Edit Pay to 150. (Diff +50). Bal should be 350.
-            // Calculation: 400 + 100 - 150 = 350. Correct.
-            
             const newAmount = parseFloat(payForm.amount);
             const diff = originalPaymentAmount - newAmount;
 
@@ -1892,7 +1922,7 @@ function PayrollTab({ employees, attendance }) {
                 amount: newAmount,
                 note: payForm.note,
                 method: payForm.method,
-                date: payForm.date // Allow date edit
+                date: payForm.date 
             });
 
             if (diff !== 0) {
@@ -1901,16 +1931,15 @@ function PayrollTab({ employees, attendance }) {
                 });
             }
         } else {
-            // CREATING NEW PAYMENT
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payments'), { 
                 employeeId: selectedEmp.id, 
                 employeeName: selectedEmp.name, 
                 amount: parseFloat(payForm.amount), 
                 date: new Date().toISOString(), 
                 note: payForm.note,
-                method: payForm.method
+                method: payForm.method,
+                type: 'payment' // Standard payment
             });
-            // Decrease balance (Owed amount decreases)
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', selectedEmp.id), { 
                 balance: increment(-parseFloat(payForm.amount))
             });
@@ -1920,22 +1949,68 @@ function PayrollTab({ employees, attendance }) {
     setIsPaying(false);
     setEditingPaymentId(null);
   };
+
+  const handleAdjustmentSubmit = async (e) => {
+      e.preventDefault();
+      if (!selectedEmp) return;
+      const amount = parseFloat(adjustForm.amount);
+      if (!amount) return;
+
+      try {
+          // If type is 'add' (Bonus/Gift), we INCREASE balance (Owe more).
+          // If type is 'subtract' (Deduction/Insurance), we DECREASE balance (Owe less).
+          const balanceChange = adjustForm.type === 'add' ? amount : -amount;
+
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'payments'), {
+              employeeId: selectedEmp.id,
+              employeeName: selectedEmp.name,
+              amount: amount,
+              date: new Date().toISOString(),
+              note: adjustForm.note,
+              category: adjustForm.category,
+              operation: adjustForm.type, // 'add' or 'subtract'
+              type: 'adjustment' // Marker for this new type of record
+          });
+
+          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', selectedEmp.id), {
+              balance: increment(balanceChange)
+          });
+
+          setIsAdjusting(false);
+      } catch (e) { console.error("Adjustment Error", e); }
+  };
   
-  const handleDeletePayment = async () => {
+  const handleDeleteTransaction = async () => {
     if(!deletePaymentData) return;
     try {
-        // Reverse balance (Add amount back to owed)
+        let reverseChange = 0;
+        
+        if (deletePaymentData.type === 'adjustment') {
+            // Reverse an adjustment
+            // If it was ADD (Bonus), we must SUBTRACT to reverse.
+            // If it was SUBTRACT (Deduction), we must ADD to reverse.
+            if (deletePaymentData.operation === 'add') reverseChange = -deletePaymentData.amount;
+            else reverseChange = deletePaymentData.amount;
+        } else {
+            // Reverse a standard payment (Payment reduces balance, so deleting it increases balance)
+            reverseChange = deletePaymentData.amount;
+        }
+
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', deletePaymentData.employeeId), {
-            balance: increment(deletePaymentData.amount)
+            balance: increment(reverseChange)
         });
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'payments', deletePaymentData.id));
         setDeletePaymentData(null);
-    } catch(e) { console.error("Error deleting payment", e); }
+    } catch(e) { console.error("Error deleting transaction", e); }
   };
 
   const openEditPayment = (pay) => {
+      // Only editing standard payments for now to keep it simple, 
+      // or we could expand to edit adjustments too but logic gets complex
+      if (pay.type === 'adjustment') return; 
+
       const emp = employees.find(e => e.id === pay.employeeId);
-      if (!emp) return; // Should handle orphaned records gracefully but simple for now
+      if (!emp) return; 
       
       setSelectedEmp(emp);
       setEditingPaymentId(pay.id);
@@ -1944,7 +2019,7 @@ function PayrollTab({ employees, attendance }) {
           amount: pay.amount,
           note: pay.note || '',
           method: pay.method || 'Bank',
-          date: pay.date // Keep original ISO string
+          date: pay.date 
       });
       setIsPaying(true);
   };
@@ -1971,15 +2046,17 @@ function PayrollTab({ employees, attendance }) {
   };
 
   const handleExportHistory = () => {
-      const headers = ['Date', 'Employee Name', 'Amount', 'Method', 'Notes'];
+      const headers = ['Date', 'Employee Name', 'Type', 'Category', 'Amount', 'Method', 'Notes'];
       const rows = filteredPayments.map(p => [
           formatDateSafe(p.date),
           p.employeeName,
+          p.type === 'adjustment' ? (p.operation === 'add' ? 'Addition' : 'Deduction') : 'Payment',
+          p.category || 'Salary',
           p.amount,
-          p.method,
+          p.method || '-',
           p.note ? `"${p.note.replace(/"/g, '""')}"` : ''
       ]);
-      downloadCSV(headers, rows, 'payment_history.csv');
+      downloadCSV(headers, rows, 'transaction_history.csv');
   };
 
   const downloadCSV = (headers, rows, filename) => {
@@ -2023,18 +2100,17 @@ function PayrollTab({ employees, attendance }) {
                     <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500">
                         <tr>
                             <th className="p-2">Employee</th>
-                            <th className="p-2">Total Time</th>
                             <th className="p-2">Log Earnings</th>
                             <th className="p-2">Owed Balance</th>
-                            <th className="p-2"></th>
+                            <th className="p-2 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y dark:divide-slate-700">
                         {(employees || []).map(emp => (
                             <tr key={emp.id}>
-                                <td className="p-2 font-medium dark:text-slate-200">{emp.name}</td>
-                                <td className="p-2 text-slate-500 dark:text-slate-400">
-                                    {formatDuration(stats[emp.id]?.hours || 0)}
+                                <td className="p-2 font-medium dark:text-slate-200">
+                                    {emp.name}
+                                    <div className="text-xs text-slate-400">{formatDuration(stats[emp.id]?.hours || 0)} worked</div>
                                 </td>
                                 <td className="p-2 text-slate-500 dark:text-slate-400">
                                     {formatCurrency(stats[emp.id]?.earned)}
@@ -2062,24 +2138,32 @@ function PayrollTab({ employees, attendance }) {
                                     )}
                                 </td>
                                 <td className="p-2 text-right">
-                                    <button 
-                                        onClick={() => { setSelectedEmp(emp); setEditingPaymentId(null); setPayForm({amount: emp.balance || 0, note: '', method: 'Bank', date: ''}); setIsPaying(true); }} 
-                                        className="text-xs text-white bg-indigo-600 px-3 py-1 rounded hover:bg-indigo-700"
-                                    >
-                                        Pay
-                                    </button>
+                                    <div className="flex justify-end gap-2">
+                                        <button 
+                                            onClick={() => { setSelectedEmp(emp); setAdjustForm({ amount: '', note: '', category: 'Gift', type: 'add' }); setIsAdjusting(true); }} 
+                                            className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300"
+                                            title="Add Gift, Bonus, or Deduction"
+                                        >
+                                            Adjust
+                                        </button>
+                                        <button 
+                                            onClick={() => { setSelectedEmp(emp); setEditingPaymentId(null); setPayForm({amount: emp.balance || 0, note: '', method: 'Bank', date: ''}); setIsPaying(true); }} 
+                                            className="text-xs text-white bg-indigo-600 px-3 py-1 rounded hover:bg-indigo-700"
+                                        >
+                                            Pay
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
-            <p className="text-xs text-slate-400 mt-2">* "Log Earnings" is calculated from loaded logs only. "Owed Balance" is the persistent ledger of earnings minus payments.</p>
          </div>
          
          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 flex flex-col">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-slate-800 dark:text-white">Recent Payments</h3>
+                <h3 className="font-bold text-slate-800 dark:text-white">Transaction History</h3>
                 <button onClick={handleExportHistory} className="flex items-center gap-1 text-sm bg-slate-100 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600">
                     <Download size={14} /> Export History
                 </button>
@@ -2093,13 +2177,19 @@ function PayrollTab({ employees, attendance }) {
                 {filteredPayments.map(pay => (
                     <div key={pay.id} className="flex justify-between items-center p-3 text-sm border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group">
                        <div className="flex-1">
-                           <div className="font-medium text-slate-800 dark:text-white">{pay.employeeName}</div>
+                           <div className="font-medium text-slate-800 dark:text-white flex items-center gap-2">
+                               {pay.employeeName}
+                               {pay.type === 'adjustment' && pay.operation === 'add' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100">+{pay.category}</span>}
+                               {pay.type === 'adjustment' && pay.operation === 'subtract' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-100">-{pay.category}</span>}
+                           </div>
                            <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2 mt-0.5">
                                <span>{formatDateSafe(pay.date)}</span>
-                               <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-1.5 rounded text-[10px]">
-                                   {pay.method === 'Cash' ? <Banknote size={10} className="text-green-500"/> : <CreditCard size={10} className="text-blue-500"/>} 
-                                   {pay.method}
-                               </span>
+                               {pay.type !== 'adjustment' && (
+                                   <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-1.5 rounded text-[10px]">
+                                       {pay.method === 'Cash' ? <Banknote size={10} className="text-green-500"/> : <CreditCard size={10} className="text-blue-500"/>} 
+                                       {pay.method}
+                                   </span>
+                               )}
                            </div>
                            {pay.note && (
                                <div className="text-xs text-slate-500 dark:text-slate-400 italic mt-1 bg-slate-50 dark:bg-slate-800 p-1 rounded inline-block max-w-full truncate">
@@ -2108,9 +2198,14 @@ function PayrollTab({ employees, attendance }) {
                            )}
                        </div>
                        <div className="flex items-center gap-3">
-                           <span className="text-green-600 font-bold">{formatCurrency(pay.amount)}</span>
+                           <span className={`font-bold ${pay.type === 'adjustment' && pay.operation === 'add' ? 'text-blue-600' : pay.type === 'adjustment' && pay.operation === 'subtract' ? 'text-orange-600' : 'text-green-600'}`}>
+                               {pay.type === 'adjustment' && pay.operation === 'subtract' ? '-' : ''}
+                               {formatCurrency(pay.amount)}
+                           </span>
                            <div className="flex gap-1">
-                               <button onClick={() => openEditPayment(pay)} className="text-slate-400 hover:text-cyan-600 p-1 hover:bg-slate-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={14}/></button>
+                               {pay.type !== 'adjustment' && (
+                                   <button onClick={() => openEditPayment(pay)} className="text-slate-400 hover:text-cyan-600 p-1 hover:bg-slate-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={14}/></button>
+                               )}
                                <button onClick={() => setDeletePaymentData(pay)} className="text-slate-400 hover:text-red-500 p-1 hover:bg-slate-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
                            </div>
                        </div>
@@ -2176,119 +2271,100 @@ function PayrollTab({ employees, attendance }) {
             </div>
         </div>
       )}
+
+      {isAdjusting && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-sm shadow-2xl">
+                <h3 className="font-bold mb-4 text-slate-800 dark:text-white">Adjust Balance for {selectedEmp?.name}</h3>
+                <form onSubmit={handleAdjustmentSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Transaction Type</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                type="button" 
+                                onClick={() => setAdjustForm({...adjustForm, type: 'add'})} 
+                                className={`p-3 rounded-lg border text-sm font-medium flex flex-col items-center gap-1 transition-all ${adjustForm.type === 'add' ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-400 ring-1 ring-blue-500' : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700'}`}
+                            >
+                                <PlusCircle size={20} />
+                                <span>Add to Balance</span>
+                                <span className="text-[10px] font-normal opacity-75">(Gift, Bonus)</span>
+                            </button>
+                            <button 
+                                type="button" 
+                                onClick={() => setAdjustForm({...adjustForm, type: 'subtract'})} 
+                                className={`p-3 rounded-lg border text-sm font-medium flex flex-col items-center gap-1 transition-all ${adjustForm.type === 'subtract' ? 'bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/30 dark:border-orange-700 dark:text-orange-400 ring-1 ring-orange-500' : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-700'}`}
+                            >
+                                <MinusCircle size={20} />
+                                <span>Deduct Balance</span>
+                                <span className="text-[10px] font-normal opacity-75">(Ins, Fine, Advance)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+                        <select 
+                            className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                            value={adjustForm.category}
+                            onChange={e => setAdjustForm({...adjustForm, category: e.target.value})}
+                        >
+                            {adjustForm.type === 'add' ? (
+                                <>
+                                    <option value="Gift">Gift</option>
+                                    <option value="Bonus">Bonus</option>
+                                    <option value="Reimbursement">Reimbursement</option>
+                                    <option value="Adjustment">Adjustment (+)</option>
+                                </>
+                            ) : (
+                                <>
+                                    <option value="Insurance">Insurance / IKA</option>
+                                    <option value="Advance">Salary Advance</option>
+                                    <option value="Fine">Fine / Deduction</option>
+                                    <option value="Adjustment">Adjustment (-)</option>
+                                </>
+                            )}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Amount</label>
+                        <input 
+                            type="number" 
+                            className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white font-bold" 
+                            value={adjustForm.amount} 
+                            onChange={e=>setAdjustForm({...adjustForm, amount: e.target.value})} 
+                            placeholder="0.00"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
+                        <input 
+                            type="text"
+                            placeholder="Description..." 
+                            className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
+                            value={adjustForm.note} 
+                            onChange={e=>setAdjustForm({...adjustForm, note: e.target.value})} 
+                        />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button type="button" onClick={()=>setIsAdjusting(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400 text-sm">Cancel</button>
+                        <button type="submit" className={`px-4 py-2 text-white rounded text-sm font-bold ${adjustForm.type === 'add' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'}`}>
+                            Save Transaction
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      )}
       
       <ConfirmModal 
         isOpen={!!deletePaymentData}
-        title="Delete Payment"
-        message={`Are you sure you want to delete this payment of ${deletePaymentData ? formatCurrency(deletePaymentData.amount) : ''}? This amount will be added back to the employee's owed balance.`}
-        onConfirm={handleDeletePayment}
+        title="Delete Transaction"
+        message={`Are you sure you want to delete this ${deletePaymentData?.type === 'adjustment' ? 'adjustment' : 'payment'}? The employee's balance will be reversed.`}
+        onConfirm={handleDeleteTransaction}
         onCancel={() => setDeletePaymentData(null)}
-      />
-    </div>
-  );
-}
-
-// --- Absences ---
-function AbsencesTab({ employees, attendance, user }) {
-  const [absences, setAbsences] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ employeeId: '', date: '', type: 'Sick', paid: false, notes: '' });
-  const [geminiLoading, setGeminiLoading] = useState(false);
-  const [geminiResult, setGeminiResult] = useState(null);
-  
-  // Delete Absence State
-  const [deleteId, setDeleteId] = useState(null);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'absences'), orderBy('date', 'desc'));
-    const unsub = onSnapshot(q, (snap) => setAbsences(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-    return () => unsub();
-  }, [user?.uid]);
-
-  // Automatic Check Effect
-  useEffect(() => {
-      if (employees.length > 0 && attendance.length > 0 && absences.length > 0) {
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          const yStr = yesterday.toISOString().slice(0, 10);
-          
-          const missingEmps = employees.filter(emp => {
-              if (emp.status !== 'Active') return false;
-              // Check for Auto-Absence Setting
-              if (emp.autoAbsence === false) return false;
-              // Skip if Auto Clock is enabled (handled in Dashboard)
-              if (emp.autoClock) return false;
-              
-              const hasAttendance = attendance.some(l => l.employeeId === emp.id && l.timestamp.startsWith(yStr));
-              const hasAbsence = absences.some(a => a.employeeId === emp.id && a.date === yStr);
-              return !hasAttendance && !hasAbsence;
-          });
-
-          if (missingEmps.length > 0) {
-              const batch = writeBatch(db);
-              missingEmps.forEach(emp => {
-                  const ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'));
-                  batch.set(ref, {
-                      employeeId: emp.id,
-                      employeeName: emp.name,
-                      date: yStr,
-                      type: 'Unexcused Absence',
-                      paid: false,
-                      notes: 'Auto-generated by system',
-                      accountantNotified: false
-                  });
-              });
-              batch.commit().catch(console.error);
-          }
-      }
-  }, [employees.length, attendance.length, absences.length]); 
-
-  const handleAddAbsence = async (e) => {
-    e.preventDefault();
-    const emp = (employees || []).find(e => e.id === form.employeeId);
-    if (!emp) return;
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'), { ...form, employeeName: emp.name, accountantNotified: false });
-    setShowModal(false);
-  };
-  
-  const confirmDeleteAbsence = async () => {
-      if (!deleteId) return;
-      try {
-          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'absences', deleteId));
-          setDeleteId(null);
-      } catch (e) {
-          console.error("Delete failed", e);
-          alert("Failed to delete absence");
-      }
-  };
-  
-  const toggleNotified = async (ab) => {
-      try {
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'absences', ab.id), {
-              accountantNotified: !ab.accountantNotified
-          });
-      } catch(e) { console.error("Update failed", e); }
-  };
-
-  const handleDraftEmail = async (ab) => {
-    setGeminiLoading(true); setGeminiResult(null);
-    const text = await callGemini(`Draft email to ${ab.employeeName} about ${ab.type} absence on ${ab.date}. Status: ${ab.paid?'Paid':'Unpaid'}. Notes: ${ab.notes}. Be professional.`);
-    setGeminiResult({ title: `Draft: ${ab.employeeName}`, content: text }); setGeminiLoading(false);
-  };
-
-  return (
-    <div className="space-y-6">
-      <GeminiModal isOpen={!!geminiResult || geminiLoading} onClose={() => { setGeminiResult(null); setGeminiLoading(false); }} title={geminiResult?.title} content={geminiResult?.content} isLoading={geminiLoading} />
-      <div className="flex justify-between"><h2 className="font-bold text-slate-800 dark:text-white">Leave Management</h2><button onClick={()=>setShowModal(true)} className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700">+ Record</button></div>
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden"><table className="w-full text-left text-sm"><thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs"><tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Employee</th><th className="px-6 py-3">Type</th><th className="px-6 py-3">Accountant</th><th className="px-6 py-3">Action</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-700">{(absences || []).map(ab => (<tr key={ab.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="px-6 py-3 text-slate-500 dark:text-slate-400">{ab.date}</td><td className="px-6 py-3 font-medium text-slate-800 dark:text-white">{ab.employeeName}</td><td className="px-6 py-3 text-slate-600 dark:text-slate-300">{ab.type}</td><td className="px-6 py-3"><button onClick={() => toggleNotified(ab)} className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-colors ${ab.accountantNotified ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'}`}>{ab.accountantNotified ? <Check size={12}/> : <XCircle size={12}/>} {ab.accountantNotified ? 'Notified' : 'Pending'}</button></td><td className="px-6 py-3 flex gap-2"><button onClick={()=>handleDraftEmail(ab)} className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 p-1.5 rounded"><Sparkles size={14}/> Email</button><button onClick={()=>setDeleteId(ab.id)} className="text-red-600 dark:text-red-400 flex items-center gap-1 hover:bg-red-50 dark:hover:bg-red-900/30 p-1.5 rounded"><Trash2 size={14}/></button></td></tr>))}</tbody></table></div>
-      {showModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 p-6 rounded-xl w-full max-w-md"><h3 className="font-bold mb-4 text-slate-800 dark:text-white">Record Absence</h3><form onSubmit={handleAddAbsence} className="space-y-4"><select required className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.employeeId} onChange={e=>setForm({...form, employeeId: e.target.value})}><option value="">Select Employee...</option>{(employees || []).map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select><input required type="date" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.date} onChange={e=>setForm({...form, date: e.target.value})} /><select className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white" value={form.type} onChange={e=>setForm({...form, type: e.target.value})}><option>Sick</option><option>Vacation</option><option>Personal</option></select><div className="flex justify-end gap-3"><button type="button" onClick={()=>setShowModal(false)} className="px-3 py-2 text-slate-500 dark:text-slate-400">Cancel</button><button type="submit" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">Save</button></div></form></div></div>)}
-      <ConfirmModal 
-        isOpen={!!deleteId}
-        title="Delete Absence"
-        message="Are you sure you want to delete this absence record? This cannot be undone."
-        onConfirm={confirmDeleteAbsence}
-        onCancel={() => setDeleteId(null)}
       />
     </div>
   );
