@@ -3,8 +3,8 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   signInAnonymously, 
-  onAuthStateChanged,
-  signInWithCustomToken,
+  onAuthStateChanged, 
+  signInWithCustomToken, 
   signOut
 } from 'firebase/auth';
 import { 
@@ -22,8 +22,8 @@ import {
   serverTimestamp, 
   orderBy, 
   limit, 
-  where,
-  writeBatch,
+  where, 
+  writeBatch, 
   increment 
 } from 'firebase/firestore';
 import { 
@@ -60,7 +60,7 @@ import {
   Sun, 
   Moon, 
   Bell, 
-  Smartphone,
+  Smartphone, 
   FileText, 
   Save, 
   Filter, 
@@ -75,11 +75,12 @@ import {
   Banknote, 
   ToggleLeft, 
   ToggleRight, 
-  ClipboardList,
-  Gift,
-  ShieldAlert,
-  MinusCircle,
-  PlusCircle
+  ClipboardList, 
+  Gift, 
+  ShieldAlert, 
+  MinusCircle, 
+  PlusCircle,
+  Mail
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -113,7 +114,7 @@ const appId = 'aqua-v1';
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IE', { 
-    style: 'currency',
+    style: 'currency', 
     currency: 'EUR',
   }).format(amount || 0);
 };
@@ -421,6 +422,10 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
       return !day.isPaid ? sum + day.pay : sum;
   }, 0);
 
+  const totalHoursInRange = visibleDates.reduce((sum, dateKey) => {
+      return sum + dailyStats[dateKey].hours;
+  }, 0);
+
   const handleEditClick = (log) => {
     const date = new Date(log.timestamp);
     const tzOffset = date.getTimezoneOffset() * 60000;
@@ -690,6 +695,9 @@ function EmployeeHistoryModal({ employee, attendance, onClose }) {
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="p-1.5 rounded border border-slate-300 dark:border-slate-600 text-sm dark:bg-slate-800 dark:text-white" />
             </div>
             <div className="flex-1 flex justify-end gap-3 items-center">
+                <span className="text-sm font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded">
+                    Hours: {formatDuration(totalHoursInRange)}
+                </span>
                 <span className="text-sm font-bold text-red-600 bg-red-50 dark:bg-red-900/30 px-3 py-1 rounded">
                     Unpaid: {formatCurrency(totalUnpaid)}
                 </span>
@@ -842,6 +850,240 @@ function QrCodeDisplayModal({ employee, onClose }) {
             </div>
         </div>
     );
+}
+
+// --- Absences Management Tab ---
+function AbsencesTab({ employees, attendance, user }) {
+  // Date State for Filtering
+  const now = new Date();
+  const [currentMonth, setCurrentMonth] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
+  
+  // Data State
+  const [absences, setAbsences] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({
+    employeeId: '',
+    date: new Date().toISOString().slice(0, 10),
+    reason: 'Sick Leave',
+    type: 'Excused',
+    accountantNotified: false
+  });
+
+  // Delete Confirmation
+  const [deleteData, setDeleteData] = useState(null);
+
+  // Fetch Absences
+  useEffect(() => {
+    const startStr = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).toISOString().slice(0, 10);
+    // Get last day of month
+    const endStr = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+    const q = query(
+      collection(db, 'artifacts', appId, 'public', 'data', 'absences'),
+      where('date', '>=', startStr),
+      where('date', '<=', endStr),
+      orderBy('date', 'desc')
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setAbsences(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [currentMonth]);
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!formData.employeeId) return alert("Please select an employee");
+
+    const emp = employees.find(e => e.id === formData.employeeId);
+    
+    try {
+      const payload = {
+        ...formData,
+        employeeName: emp ? emp.name : 'Unknown',
+        isExcused: formData.type === 'Excused',
+        updatedAt: serverTimestamp()
+      };
+
+      if (editingId) {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'absences', editingId), payload);
+      } else {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'), {
+          ...payload,
+          createdAt: serverTimestamp(),
+          source: 'manual'
+        });
+      }
+      setIsModalOpen(false);
+      setEditingId(null);
+      // Reset form
+      setFormData({ employeeId: '', date: new Date().toISOString().slice(0, 10), reason: 'Sick Leave', type: 'Excused', accountantNotified: false });
+    } catch (error) {
+      console.error(error);
+      alert("Error saving absence");
+    }
+  };
+
+  const handleEdit = (abs) => {
+    setFormData({
+      employeeId: abs.employeeId,
+      date: abs.date,
+      reason: abs.reason,
+      type: abs.type,
+      accountantNotified: abs.accountantNotified || false
+    });
+    setEditingId(abs.id);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteData) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'absences', deleteData.id));
+      setDeleteData(null);
+    } catch (e) { alert("Failed to delete"); }
+  };
+
+  const toggleAccountantNotified = async (absence) => {
+    try {
+      const ref = doc(db, 'artifacts', appId, 'public', 'data', 'absences', absence.id);
+      await updateDoc(ref, { accountantNotified: !absence.accountantNotified });
+    } catch (e) { console.error("Toggle failed", e); }
+  };
+
+  const changeMonth = (delta) => {
+    const newDate = new Date(currentMonth);
+    newDate.setMonth(newDate.getMonth() + delta);
+    setCurrentMonth(newDate);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm gap-4">
+        <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600">
+            <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors"><ChevronLeft size={20} /></button>
+            <span className="font-bold text-slate-700 dark:text-white w-40 text-center text-sm">
+              {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </span>
+            <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full text-slate-500 dark:text-slate-400 transition-colors"><ChevronRight size={20} /></button>
+        </div>
+        <button onClick={() => { setEditingId(null); setFormData({...formData, employeeId: employees[0]?.id || ''}); setIsModalOpen(true); }} className="bg-cyan-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-cyan-700 shadow-sm">
+          <Plus size={18} /> Add Absence
+        </button>
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium text-xs sticky top-0">
+              <tr>
+                <th className="px-6 py-3">Date</th>
+                <th className="px-6 py-3">Employee</th>
+                <th className="px-6 py-3">Type</th>
+                <th className="px-6 py-3">Reason</th>
+                <th className="px-6 py-3 text-center">Accountant Notified</th>
+                <th className="px-6 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              {absences.length === 0 ? (
+                <tr><td colSpan="6" className="px-6 py-8 text-center text-slate-400 dark:text-slate-500">No absences recorded for this month.</td></tr>
+              ) : absences.map(abs => (
+                <tr key={abs.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                  <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono">{formatDateSafe(abs.date)}</td>
+                  <td className="px-6 py-4 font-medium text-slate-800 dark:text-white">{abs.employeeName}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${abs.type === 'Excused' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {abs.type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{abs.reason}</td>
+                  <td className="px-6 py-4 text-center">
+                    <button 
+                      onClick={() => toggleAccountantNotified(abs)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 ${abs.accountantNotified ? 'bg-cyan-600' : 'bg-slate-200 dark:bg-slate-600'}`}
+                    >
+                      <span className={`${abs.accountantNotified ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+                    </button>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                        <button onClick={() => handleEdit(abs)} className="p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded"><Edit size={16}/></button>
+                        <button onClick={() => setDeleteData(abs)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-in fade-in zoom-in duration-200">
+            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">{editingId ? 'Edit Absence' : 'Record Absence'}</h3>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Employee</label>
+                <select 
+                  className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                  value={formData.employeeId}
+                  onChange={e => setFormData({...formData, employeeId: e.target.value})}
+                  required
+                >
+                  <option value="">Select Employee</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Date</label>
+                  <input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"/>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Type</label>
+                  <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white">
+                    <option value="Excused">Excused (Paid/Unpaid)</option>
+                    <option value="Unexcused">Unexcused</option>
+                    <option value="Sick">Sick Leave</option>
+                    <option value="Vacation">Vacation</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Reason</label>
+                <input type="text" placeholder="e.g., Doctor Appointment, Car trouble" value={formData.reason} onChange={e => setFormData({...formData, reason: e.target.value})} className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"/>
+              </div>
+              <div className="flex items-center gap-2 pt-2">
+                 <input type="checkbox" id="accNotif" checked={formData.accountantNotified} onChange={e => setFormData({...formData, accountantNotified: e.target.checked})} className="w-4 h-4"/>
+                 <label htmlFor="accNotif" className="text-sm font-medium text-slate-700 dark:text-slate-300">Accountant Notified</label>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 rounded">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 font-bold">Save Record</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal 
+        isOpen={!!deleteData}
+        title="Delete Absence"
+        message="Are you sure you want to delete this absence record?"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteData(null)}
+      />
+    </div>
+  );
 }
 
 // --- MAIN APP COMPONENT ---
@@ -1087,73 +1329,96 @@ function AdminDashboard({ user, navigate, isDarkMode, setIsDarkMode }) {
 
   // --- AUTOMATIC CLOCK IN/OUT & ABSENCE CHECK LOGIC ---
   useEffect(() => {
-      // Logic: Run this check when employees/attendance load.
-      // Filter: Employees with 'autoClock' = true
-      // Action: Check YESTERDAY. If no logs exist, create IN/OUT logs.
-      if (employees.length > 0 && attendance.length > 0) {
+      const runAutoLogic = async () => {
+          if (employees.length === 0) return; // Wait for employees to load
+
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
-          const yStr = yesterday.toISOString().slice(0, 10);
-          
+          const yStr = yesterday.toISOString().slice(0, 10); // YYYY-MM-DD
+
+          // We need to fetch existing absences for yesterday to avoid duplicates
+          const absQuery = query(
+              collection(db, 'artifacts', appId, 'public', 'data', 'absences'),
+              where('date', '==', yStr)
+          );
+          const absSnap = await getDocs(absQuery);
+          const existingAbsenceEmpIds = absSnap.docs.map(d => d.data().employeeId);
+
           const batch = writeBatch(db);
           let hasUpdates = false;
 
           employees.forEach(emp => {
-              if (emp.status !== 'Active') return;
+            if (emp.status !== 'Active') return;
 
-              // Check if logs exist for yesterday
-              const hasAttendance = attendance.some(l => l.employeeId === emp.id && l.timestamp.startsWith(yStr));
-              
-              if (!hasAttendance) {
-                  // AUTO CLOCK LOGIC
-                  if (emp.autoClock) {
-                      const inTimeStr = emp.autoClockInTime || '09:00';
-                      const outTimeStr = emp.autoClockOutTime || '17:00';
-                      
-                      const inTs = new Date(`${yStr}T${inTimeStr}`).toISOString();
-                      const outTs = new Date(`${yStr}T${outTimeStr}`).toISOString();
-                      
-                      // Calculate hours
-                      const start = new Date(inTs).getTime();
-                      const end = new Date(outTs).getTime();
-                      let hours = 0;
-                      if (end > start) hours = (end - start) / (1000 * 60 * 60);
-                      
-                      const earned = hours * (parseFloat(emp.hourlyRate) || 0);
+            // 1. Check if they worked yesterday
+            // We look for ANY log starting with yesterday's date string
+            const workedYesterday = attendance.some(l => l.employeeId === emp.id && l.timestamp.startsWith(yStr));
 
-                      // Add IN Log
-                      const inRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'));
-                      batch.set(inRef, {
-                          employeeId: emp.id, employeeName: emp.name, timestamp: inTs, action: 'IN', source: 'auto',
-                          createdAt: serverTimestamp()
-                      });
+            if (!workedYesterday) {
+              // --- A. AUTO CLOCK LOGIC (Existing) ---
+              if (emp.autoClock) {
+                  const inTimeStr = emp.autoClockInTime || '09:00';
+                  const outTimeStr = emp.autoClockOutTime || '17:00';
+                  
+                  const inTs = new Date(`${yStr}T${inTimeStr}`).toISOString();
+                  const outTs = new Date(`${yStr}T${outTimeStr}`).toISOString();
+                  
+                  // Calculate hours
+                  const start = new Date(inTs).getTime();
+                  const end = new Date(outTs).getTime();
+                  let hours = 0;
+                  if (end > start) hours = (end - start) / (1000 * 60 * 60);
+                  const earned = hours * (parseFloat(emp.hourlyRate) || 0);
 
-                      // Add OUT Log
-                      const outRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'));
-                      batch.set(outRef, {
-                          employeeId: emp.id, employeeName: emp.name, timestamp: outTs, action: 'OUT', source: 'auto',
-                          calculatedHours: hours, earnedAmount: earned, createdAt: serverTimestamp()
-                      });
+                  // Add IN Log
+                  const inRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'));
+                  batch.set(inRef, {
+                      employeeId: emp.id, employeeName: emp.name, timestamp: inTs, action: 'IN', source: 'auto',
+                      createdAt: serverTimestamp()
+                  });
 
-                      // Update Employee Stats
-                      const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id);
-                      batch.update(empRef, {
-                          balance: increment(earned),
-                          totalHours: increment(hours)
-                      });
-                      hasUpdates = true;
-                  } 
-                  // ABSENCE LOGIC (Only if autoAbsence is enabled and NOT autoClock)
-                  else if (emp.autoAbsence !== false) {
-                        // Check if absence already exists is handled in AbsencesTab mostly, but we can do a quick check if needed.
-                        // However, strictly sticking to user request: "toggle for an employee auto check in/check out".
-                        // The existing absence logic in AbsencesTab will handle the rest if they don't have attendance.
-                  }
+                  // Add OUT Log
+                  const outRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'));
+                  batch.set(outRef, {
+                      employeeId: emp.id, employeeName: emp.name, timestamp: outTs, action: 'OUT', source: 'auto',
+                      calculatedHours: hours, earnedAmount: earned, createdAt: serverTimestamp()
+                  });
+
+                  // Update Employee Stats
+                  const empRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', emp.id);
+                  batch.update(empRef, {
+                      balance: increment(earned),
+                      totalHours: increment(hours)
+                  });
+                  hasUpdates = true;
+              } 
+              // --- B. AUTO ABSENCE LOGIC (New) ---
+              // If they didn't work, don't have auto-clock, AND autoAbsence is enabled
+              else if (emp.autoAbsence !== false && !existingAbsenceEmpIds.includes(emp.id)) {
+                 const absRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'absences'));
+                 batch.set(absRef, {
+                    employeeId: emp.id,
+                    employeeName: emp.name,
+                    date: yStr,
+                    reason: 'No Show (Auto)',
+                    type: 'Unexcused',
+                    isExcused: false,
+                    accountantNotified: false,
+                    source: 'auto',
+                    createdAt: serverTimestamp()
+                 });
+                 hasUpdates = true;
               }
+            }
           });
 
-          if (hasUpdates) batch.commit().catch(console.error);
-      }
+          if (hasUpdates) {
+              await batch.commit();
+              console.log("Auto-logic executed successfully.");
+          }
+      };
+
+      runAutoLogic();
   }, [employees.length, attendance.length]); // Dependencies ensure it runs when data loads
 
   const MenuItem = ({ id, icon: Icon, label }) => ( <button onClick={() => setActiveTab(id)} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === id ? 'bg-cyan-500/10 text-cyan-500 dark:bg-cyan-600/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400'}`}><Icon size={20} /><span className="font-medium">{label}</span></button> );
@@ -1612,11 +1877,11 @@ function EmployeesTab({ employees, attendance, user, departments }) {
       barcode: '', 
       hourlyRate: 0, 
       status: 'Active', 
-      department: 'Operations',
-      employmentType: 'Full Time',
-      autoAbsence: true,
-      autoClock: false,
-      autoClockInTime: '09:00',
+      department: 'Operations', 
+      employmentType: 'Full Time', 
+      autoAbsence: true, 
+      autoClock: false, 
+      autoClockInTime: '09:00', 
       autoClockOutTime: '17:00'
   });
   const [search, setSearch] = useState('');
@@ -1936,7 +2201,7 @@ function PayrollTab({ employees, attendance }) {
                 employeeName: selectedEmp.name, 
                 amount: parseFloat(payForm.amount), 
                 date: new Date().toISOString(), 
-                note: payForm.note,
+                note: payForm.note, 
                 method: payForm.method,
                 type: 'payment' // Standard payment
             });
@@ -2186,8 +2451,8 @@ function PayrollTab({ employees, attendance }) {
                                <span>{formatDateSafe(pay.date)}</span>
                                {pay.type !== 'adjustment' && (
                                    <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-1.5 rounded text-[10px]">
-                                       {pay.method === 'Cash' ? <Banknote size={10} className="text-green-500"/> : <CreditCard size={10} className="text-blue-500"/>} 
-                                       {pay.method}
+                                        {pay.method === 'Cash' ? <Banknote size={10} className="text-green-500"/> : <CreditCard size={10} className="text-blue-500"/>} 
+                                        {pay.method}
                                    </span>
                                )}
                            </div>
